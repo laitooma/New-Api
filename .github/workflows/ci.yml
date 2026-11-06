@@ -31,6 +31,10 @@ jobs:
   docker:
     needs: lint-and-test
     runs-on: ubuntu-latest
+    # Droit d'ecrire dans GitHub Container Registry (ghcr.io) avec le GITHUB_TOKEN
+    permissions:
+      contents: read
+      packages: write
     steps:
       - uses: actions/checkout@v5
 
@@ -50,3 +54,18 @@ jobs:
           echo "L'API n'a pas repondu" >&2
           docker logs api
           exit 1
+
+      # Publication : seulement apres un push sur main (jamais depuis une PR)
+      - name: Connexion a ghcr.io
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Publier l'image sur ghcr.io
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          # ghcr.io exige un nom en minuscules : laitooma/New-Api -> laitooma/new-api
+          IMAGE="ghcr.io/${GITHUB_REPOSITORY,,}"
+          docker tag new-api:ci "$IMAGE:latest"
+          docker tag new-api:ci "$IMAGE:sha-${GITHUB_SHA::7}"
+          docker push --all-tags "$IMAGE"
+          echo "Image publiee : $IMAGE"

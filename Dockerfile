@@ -1,6 +1,9 @@
 # Image legere officielle Python
 FROM python:3.13-slim
 
+# Relie le package ghcr.io a ce depot GitHub
+LABEL org.opencontainers.image.source="https://github.com/laitooma/New-Api"
+
 # Pas de fichiers .pyc, logs affiches immediatement
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
