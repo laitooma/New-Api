@@ -1,0 +1,8 @@
+[tool.pytest.ini_options]
+# Permet a `pytest` de trouver le package `app` depuis la racine du projet.
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py313"
+line-length = 88
