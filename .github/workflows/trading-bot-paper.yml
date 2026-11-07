@@ -5,6 +5,10 @@ name: Bot trading - simulation quotidienne
 on:
   schedule:
     - cron: "23 0 * * *" # 00:23 UTC, juste apres la cloture journaliere
+    # creneaux de secours : GitHub saute parfois des passages planifies ;
+    # le bot ne trade qu'une fois par jour UTC, un 2e passage ne fait rien
+    - cron: "37 3 * * *"
+    - cron: "13 9 * * *"
   workflow_dispatch:
 
 permissions:
@@ -49,5 +53,6 @@ jobs:
             echo "Rien de nouveau"
           else
             git commit -m "Paper trading (Kraken) $(date -u +%F)"
+            git pull --rebase
             git push
           fi

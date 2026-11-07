@@ -5,6 +5,10 @@ name: Bot trading - simulation day trading
 on:
   schedule:
     - cron: "11 21 * * *" # 21:11 UTC, la bougie de 20:00 est cloturee
+    # creneaux de secours : GitHub saute parfois des passages planifies ;
+    # chaque passage rattrape les jours manquants, jamais deux fois le meme
+    - cron: "47 23 * * *"
+    - cron: "29 5 * * *"
   workflow_dispatch:
 
 permissions:

@@ -7,8 +7,8 @@ day per market, 0.10% cost per side. It was the only one of 32 tested
 combinations positive on all 4 markets over 20 days, which is likely luck (its gain
 came from shorts in a falling market). Only these future days can tell.
 
-Run once a day after 21:00 UTC (a later run, even past midnight, records the
-previous day instead, and a day is never recorded twice):
+Run after 21:00 UTC. Every run records all finished days not recorded yet
+(GitHub sometimes skips scheduled runs), and a day is never recorded twice:
     python intraday_paper.py           # Kraken public hourly prices (no API key)
     python intraday_paper.py --csv     # replay every day of data/*_H1.csv (check)
 """
@@ -47,7 +47,7 @@ def fetch_kraken(symbol: str) -> pd.DataFrame:
     import ccxt
 
     ex = ccxt.kraken({"enableRateLimit": True})
-    rows = ex.fetch_ohlcv(symbol, "1h", limit=72)
+    rows = ex.fetch_ohlcv(symbol, "1h", limit=720)  # ~30 days: room to catch up
     df = pd.DataFrame(rows, columns=["t", "open", "high", "low", "close", "vol"])
     df.index = pd.to_datetime(df["t"], unit="ms", utc=True)
     return df[["open", "high", "low", "close"]].astype(float)
@@ -90,27 +90,46 @@ def is_out_of_sample(day: pd.Timestamp) -> bool:
     return day.normalize() >= FIRST_DAY
 
 
+def finished_days(now: pd.Timestamp) -> list:
+    """Days from FIRST_DAY whose trading is over (20:00 bar closed at 21:00 UTC),
+    oldest first. Kraken's 720 hourly bars cover the last ~30 of them."""
+    last = now.normalize() if now.hour >= 21 else now.normalize() - pd.Timedelta(days=1)
+    first = max(FIRST_DAY, last - pd.Timedelta(days=28))
+    return list(pd.date_range(first, last, freq="D")) if last >= FIRST_DAY else []
+
+
+def recorded() -> set:
+    path = os.path.join(OUT_DIR, "days.csv")
+    if not os.path.exists(path):
+        return set()
+    with open(path) as f:
+        return {(r["date"], r["market"]) for r in csv.DictReader(f)}
+
+
 def run_today() -> None:
-    """Record the most recent finished trading day. After 21:00 UTC that is
-    today; before (e.g. a run delayed past midnight) it is yesterday."""
+    """Record every finished out-of-sample day not recorded yet, so a run that
+    GitHub delayed or skipped is caught up by the next one. Never twice."""
     now = pd.Timestamp(datetime.now(UTC))
-    today = (
-        now.normalize() if now.hour >= 21 else now.normalize() - pd.Timedelta(days=1)
-    )
-    if not is_out_of_sample(today):
-        print(
-            f"{today.date()} is before {FIRST_DAY.date()} (already seen), not recorded"
-        )
+    days = finished_days(now)
+    if not days:
+        print(f"nothing to record before {FIRST_DAY.date()} (earlier days were seen)")
         return
+    done = recorded()
     for name, sym in MARKETS.items():
-        df = closed_hourly(fetch_kraken(sym), now)
-        bars = df[df.index.normalize() == today]
-        if len(bars) < 21:
-            print(f"{name}: only {len(bars)} hourly bars today, skipped")
+        todo = [d for d in days if (str(d.date()), name) not in done]
+        if not todo:
             continue
-        res = day_result(bars)
-        record(today.date(), name, res)
-        print(f"{today.date()} {name}: {res['trades']} trade(s), {res['pnl_%']:+.2f}%")
+        df = closed_hourly(fetch_kraken(sym), now)
+        for day in todo:
+            bars = df[df.index.normalize() == day]
+            if len(bars) < 21:
+                print(f"{day.date()} {name}: only {len(bars)} hourly bars, skipped")
+                continue
+            res = day_result(bars)
+            record(day.date(), name, res)
+            print(
+                f"{day.date()} {name}: {res['trades']} trade(s), {res['pnl_%']:+.2f}%"
+            )
     summary()
 
 

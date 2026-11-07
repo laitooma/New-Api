@@ -61,3 +61,22 @@ def test_only_unseen_days_are_recorded():
 
     assert not ip.is_out_of_sample(pd.Timestamp("2026-11-07 22:00", tz="UTC"))
     assert ip.is_out_of_sample(pd.Timestamp("2026-11-08 21:11", tz="UTC"))
+
+
+def test_missed_days_are_caught_up_once():
+    import pandas as pd
+
+    ts = pd.Timestamp
+    assert ip.finished_days(ts("2026-11-08 20:59", tz="UTC")) == []  # day 8 not over
+    assert [d.day for d in ip.finished_days(ts("2026-11-08 21:30", tz="UTC"))] == [8]
+    # runs on the 9th and 10th were skipped: the run on the 11th catches up 8..10
+    days = ip.finished_days(ts("2026-11-11 03:00", tz="UTC"))
+    assert [d.day for d in days] == [8, 9, 10]
+
+
+def test_record_never_writes_a_day_twice(tmp_path, monkeypatch):
+    monkeypatch.setattr(ip, "OUT_DIR", str(tmp_path))
+    for _ in range(2):
+        ip.record("2026-11-08", "BTC", {"trades": 1, "pnl_%": 0.5})
+    assert len((tmp_path / "days.csv").read_text().strip().splitlines()) == 2
+    assert ("2026-11-08", "BTC") in ip.recorded()
