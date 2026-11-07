@@ -44,3 +44,13 @@ def test_day_result_matches_engine_on_one_day():
         res["pnl_%"] == it.run(bars, it.asia_breakout(bars), ip.COST, False)["total_%"]
     )
     assert res["trades"] <= 1  # one trade a day at most
+
+
+def test_asia_trade_closed_at_20h():
+    """Positions are held at most during the 08:00..19:00 bars: out at 20:00 UTC."""
+    import pandas as pd
+
+    pos = it._flat_at_day_end(it.asia_breakout(df), df.index)
+    held = pd.Series(np.r_[0.0, pos[:-1]], index=df.index)
+    hours = set(held[held != 0].index.hour)
+    assert hours and min(hours) >= 8 and max(hours) <= 19

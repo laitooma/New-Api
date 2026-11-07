@@ -7,7 +7,8 @@ day per market, 0.10% cost per side. It was the only one of 32 tested
 combinations positive on all 4 markets over 20 days, which is likely luck (its gain
 came from shorts in a falling market). Only these future days can tell.
 
-Run once a day after 21:00 UTC (the 20:00 bar must be closed):
+Run once a day after 21:00 UTC (a later run, even past midnight, records the
+previous day instead, and a day is never recorded twice):
     python intraday_paper.py           # Kraken public hourly prices (no API key)
     python intraday_paper.py --csv     # replay every day of data/*_H1.csv (check)
 """
@@ -82,12 +83,12 @@ def summary() -> None:
 
 
 def run_today() -> None:
+    """Record the most recent finished trading day. After 21:00 UTC that is
+    today; before (e.g. a run delayed past midnight) it is yesterday."""
     now = pd.Timestamp(datetime.now(UTC))
-    today = now.normalize()
-    if now.hour < 21:
-        raise SystemExit(
-            "run after 21:00 UTC (the 20:00 bar must be closed). Nothing done."
-        )
+    today = (
+        now.normalize() if now.hour >= 21 else now.normalize() - pd.Timedelta(days=1)
+    )
     for name, sym in MARKETS.items():
         df = closed_hourly(fetch_kraken(sym), now)
         bars = df[df.index.normalize() == today]

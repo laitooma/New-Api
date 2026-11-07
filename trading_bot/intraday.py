@@ -4,7 +4,7 @@ Same honesty rules as the daily engine:
 - a position is decided at the close of an hourly bar and applied to the NEXT bar;
 - every change of position pays `cost` (fee + spread/slippage) on the traded size;
 - every position is closed at the end of the UTC day (FLAT_HOUR), so nothing is
-  held overnight: that is what makes it day trading;
+  held overnight (positions are flat from 23:00 UTC): that is day trading;
 - the last bar of the file may still be forming, so it is dropped.
 
 Positions are -1 (short), 0 (flat) or +1 (long). `long_only=True` removes shorts
@@ -14,7 +14,7 @@ Positions are -1 (short), 0 (flat) or +1 (long). `long_only=True` removes shorts
 import numpy as np
 import pandas as pd
 
-FLAT_HOUR = 23  # close everything at the end of the 23:00 UTC bar
+FLAT_HOUR = 23  # flat from 23:00 UTC: nothing is held during the day's last hour
 
 
 def load_h1(path: str) -> pd.DataFrame:
@@ -108,7 +108,9 @@ def asia_breakout(df: pd.DataFrame, end_hour: int = 20) -> np.ndarray:
         p, done = 0.0, False
         for ts, row in g.iterrows():
             i = df.index.get_loc(ts)
-            if ts.hour >= end_hour:
+            # the decision at the close of the (end_hour-1) bar is the last one:
+            # flat from then on, so the trade is closed at end_hour:00 UTC
+            if ts.hour >= end_hour - 1:
                 p = 0.0
             elif ts.hour >= 7 and p == 0 and not done:
                 if row["close"] > rh:
