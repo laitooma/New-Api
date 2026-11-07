@@ -1,0 +1,7 @@
+/state.json
+/trades.csv
+replay_state.json
+replay_trades.csv
+__pycache__/
+.pytest_cache/
+.env

@@ -1,0 +1,53 @@
+name: Bot trading - simulation quotidienne
+
+# Simulation uniquement : aucune cle API, aucun argent reel.
+# GitHub ne lance les workflows "schedule" que depuis la branche par defaut (main).
+on:
+  schedule:
+    - cron: "23 0 * * *" # 00:23 UTC, juste apres la cloture journaliere
+  workflow_dispatch:
+
+permissions:
+  contents: write # pour enregistrer l'etat de la simulation dans le depot
+
+concurrency:
+  group: trading-bot-paper
+  cancel-in-progress: false
+
+jobs:
+  paper:
+    runs-on: ubuntu-latest
+    env:
+      BOT_EXCHANGE: kraken # donnees publiques, accessibles depuis les serveurs GitHub
+      BOT_QUOTE: USD
+      BOT_STATE_DIR: paper_kraken
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Installer les dependances
+        run: pip install pandas numpy requests ccxt
+
+      - name: Passage du bot (simulation)
+        working-directory: trading_bot
+        run: |
+          mkdir -p "$BOT_STATE_DIR"
+          python bot.py | tee run.log
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          cat run.log >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Enregistrer le resultat
+        run: |
+          git config user.name "trading-bot"
+          git config user.email "trading-bot@users.noreply.github.com"
+          git add trading_bot/paper_kraken
+          if git diff --cached --quiet; then
+            echo "Rien de nouveau"
+          else
+            git commit -m "Paper trading (Kraken) $(date -u +%F)"
+            git push
+          fi
