@@ -57,6 +57,38 @@ def closed_daily(df: pd.DataFrame) -> pd.DataFrame:
     return df[df.index < today]
 
 
+MAX_DAILY_MOVE = 0.35  # 2x the largest real daily move seen (ETH, 17.5%)
+MAX_AGE_DAYS = 4  # last closed candle may be at most this old (weekends)
+MAX_GAP_DAYS = 5  # largest hole allowed between two candles
+
+
+class DataError(RuntimeError):
+    """Raised when market data looks wrong: the bot then trades nothing."""
+
+
+def check_history(name: str, df: pd.DataFrame, today=None) -> None:
+    """Refuse to trade on data that looks broken (zero/negative or missing
+    prices, high below low, stale feed, holes, or an absurd price jump)."""
+    today = today or pd.Timestamp.now(tz="UTC").normalize()
+    recent = df.iloc[-(MIN_HISTORY + 1) :]
+    cols = recent[["open", "high", "low", "close"]]
+    if len(recent) < MIN_HISTORY:
+        raise DataError(f"{name}: only {len(recent)} candles, need {MIN_HISTORY}")
+    if cols.isna().any().any() or (cols <= 0).any().any():
+        raise DataError(f"{name}: missing or non-positive prices")
+    if (recent["high"] < recent["low"]).any():
+        raise DataError(f"{name}: a candle has high below low")
+    age = (today - recent.index[-1].normalize()).days
+    if age > MAX_AGE_DAYS:
+        raise DataError(f"{name}: last candle is {age} days old (feed stale?)")
+    gap = recent.index.to_series().diff().dt.days.max()
+    if gap > MAX_GAP_DAYS:
+        raise DataError(f"{name}: {gap:.0f}-day hole in the data")
+    move = recent["close"].pct_change().abs().max()
+    if move > MAX_DAILY_MOVE:
+        raise DataError(f"{name}: {move:.0%} one-day move, looks like a bad price")
+
+
 def fetch_exchange(ex, symbol: str) -> pd.DataFrame:
     rows = ex.fetch_ohlcv(symbol, "1d", limit=200)
     df = pd.DataFrame(rows, columns=["t", "open", "high", "low", "close", "vol"])
@@ -272,6 +304,12 @@ def run_today(live: bool) -> None:
             history[k] = fetch_yahoo(s["yahoo"])
             prices[k] = float(history[k]["close"].iloc[-1])
 
+    try:
+        for k, h in history.items():
+            check_history(k, h)
+    except DataError as e:
+        sys.exit(f"DATA CHECK FAILED, nothing traded: {e}")
+
     state = load_state()
     today = str(datetime.now(UTC).date())
     if state.get("last_run") == today:
@@ -319,9 +357,11 @@ def run_paper_csv() -> None:
     today = pd.Timestamp.now(tz="UTC").normalize()
     data = {k: load_csv(s["csv"]) for k, s in SLEEVES.items()}
     hist = {k: closed_daily(d) for k, d in data.items()}
-    stale = [k for k, h in hist.items() if (today - h.index[-1].normalize()).days > 4]
-    if stale:
-        sys.exit(f"data too old for {stale}: run update_data.py first. Nothing done.")
+    try:
+        for k, h in hist.items():
+            check_history(k, h, today)
+    except DataError as e:
+        sys.exit(f"DATA CHECK FAILED, nothing traded: {e} (run update_data.py?)")
     prices = {}
     for k, d in data.items():
         row = d[d.index.normalize() == today]

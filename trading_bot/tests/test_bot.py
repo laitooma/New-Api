@@ -147,3 +147,34 @@ def test_run_today_paper_runs_once_per_day(tmp_path, monkeypatch):
     bot.run_today(live=False)  # second call the same day must do nothing
     lines = (tmp_path / "e.csv").read_text().strip().splitlines()
     assert len(lines) == 2  # header + one day
+
+
+def _recent():
+    """Real BTC history re-dated so its last closed candle is yesterday."""
+    d = df.copy()
+    shift = pd.Timestamp.now(tz="UTC").normalize() - pd.Timedelta(days=1) - d.index[-1]
+    d.index = d.index + shift
+    return d
+
+
+def test_check_history_accepts_real_data():
+    for name in ["BTC_USD", "ETH_USD", "XAU_USD", "NAS100_USD"]:
+        d = bt.load(os.path.join(DATA, f"{name}_D.csv"))
+        bot.check_history(name, d, today=d.index[-1].normalize())
+
+
+def test_check_history_rejects_bad_data():
+    import pytest
+
+    good = _recent()
+    bot.check_history("ok", good)
+    bad_price = good.copy()
+    bad_price.iloc[-1, bad_price.columns.get_loc("close")] *= 3  # +200% spike
+    stale = good.copy()
+    stale.index = stale.index - pd.Timedelta(days=10)
+    zero = good.copy()
+    zero.iloc[-5, zero.columns.get_loc("low")] = 0
+    holed = good.drop(good.index[-20:-10])
+    for broken in (bad_price, stale, zero, holed, good.iloc[-50:]):
+        with pytest.raises(bot.DataError):
+            bot.check_history("x", broken)
