@@ -1,7 +1,7 @@
-"""Merge daily candles fetched with the TraderWAI connector (get_ohlc, timeframe D)
-into data/<SYMBOL>_D.csv. The connector's replies are read from this Claude
+"""Merge candles fetched with the TraderWAI connector (get_ohlc, any timeframe)
+into data/<SYMBOL>_<TF>.csv (e.g. BTC_USD_D.csv, BTC_USD_H1.csv). The connector's replies are read from this Claude
 session's transcript (newest .jsonl under ~/.claude/projects), so no number is
-ever copied by hand. Newer values overwrite older ones for the same day."""
+ever copied by hand. Newer values overwrite older ones for the same candle."""
 
 import csv
 import glob
@@ -20,13 +20,9 @@ def candles_from_transcripts():
 
     def walk(o):
         if isinstance(o, str):
-            if (
-                o.startswith("OHLC data for ")
-                and " D — " in o
-                and "Candles (time=unix seconds):" in o
-            ):
-                sym = o.split()[3]
-                found.setdefault(sym, {}).update(
+            if o.startswith("OHLC data for ") and "Candles (time=unix seconds):" in o:
+                sym, tf = o.split()[3], o.split()[4]
+                found.setdefault((sym, tf), {}).update(
                     {
                         c["time"]: c
                         for c in json.loads(
@@ -52,8 +48,8 @@ def candles_from_transcripts():
 
 
 def main():
-    for sym, new in candles_from_transcripts().items():
-        path = os.path.join(HERE, "data", f"{sym}_D.csv")
+    for (sym, tf), new in candles_from_transcripts().items():
+        path = os.path.join(HERE, "data", f"{sym}_{tf}.csv")
         rows = {}
         if os.path.exists(path):
             with open(path) as fh:
@@ -71,7 +67,7 @@ def main():
             w.writeheader()
             for t in sorted(rows):
                 w.writerow(rows[t])
-        print(f"{sym}: {before} -> {len(rows)} candles, last {max(rows)}")
+        print(f"{sym} {tf}: {before} -> {len(rows)} candles, last {max(rows)}")
 
 
 if __name__ == "__main__":

@@ -49,6 +49,7 @@ jobs:
         run: |
           python bot.py --replay
           python crosscheck.py
+          python intraday_paper.py --csv
 
   docker:
     needs: lint-and-test
