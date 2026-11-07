@@ -88,6 +88,12 @@ trader, et refuse de démarrer sinon.
 
 ## Sécurités intégrées
 - Simulation par défaut. Le mode réel exige `--live` **et** les clés API.
+- **Approbation avant chaque ordre réel** : en `--live`, le bot affiche les ordres prévus et
+  attend que tu tapes `OUI`. Sans terminal (tâche automatique), la réponse est non.
+  `--yes` supprime la question : à réserver à une installation automatique de confiance.
+- **Contrôle des tailles** : tout achat supérieur à 40 % du capital est bloqué (la stratégie
+  n'en demande jamais plus d'un tiers ; au-delà c'est un bug ou un prix faux). Les ventes ne
+  sont jamais bloquées, pour que l'arrêt d'urgence puisse toujours tout vendre.
 - **Arrêt d'urgence** : si le capital baisse de 20 % depuis son plus haut, le
   bot vend tout et ne trade plus. Pour le relancer, il faut modifier `state.json`
   à la main (`"halted": false`).
