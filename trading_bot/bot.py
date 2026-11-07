@@ -34,7 +34,8 @@ QUOTE = os.getenv("BOT_QUOTE", "USDC")
 FEE = 0.001  # exchange fee per side used in paper mode (Binance spot)
 SLIPPAGE = 0.001  # extra cost assumed in paper mode
 REBALANCE_BAND = 0.05  # trade a sleeve only if off target by > 5% of equity
-KILL_SWITCH_DD = 0.20  # stop everything after a 20% fall from peak
+KILL_SWITCH_DD = 0.20
+MAX_BUY_FRACTION = 0.40  # a buy above 40% of equity can only be a bug or a bad price  # stop everything after a 20% fall from peak
 MIN_HISTORY = 101  # longest SMA (100) + 1
 
 # kind "exchange": traded automatically. kind "manual": the bot tells you
@@ -230,8 +231,14 @@ def sync_live_state(ex, state: dict) -> None:
 
 
 # ---------------------------------------------------------------- one daily step
-def step(state: dict, history: dict, exec_prices: dict, when: str, ex=None) -> dict:
-    """Decide on closed candles, trade at exec_prices. Returns a summary."""
+def step(
+    state: dict, history: dict, exec_prices: dict, when: str, ex=None, approve=None
+) -> dict:
+    """Decide on closed candles, trade at exec_prices. Returns a summary.
+
+    `approve(orders, prices) -> bool` is asked before any live order; when it
+    says no, nothing is traded. Buys larger than MAX_BUY_FRACTION of equity are
+    always blocked (sells never are, so the kill switch can always sell)."""
     equity, _ = plan_orders(state, exec_prices, {})
     state["peak"] = max(state["peak"], equity)
     dd = 1 - equity / state["peak"]
@@ -260,6 +267,23 @@ def step(state: dict, history: dict, exec_prices: dict, when: str, ex=None) -> d
         }
 
     equity, orders = plan_orders(state, exec_prices, weights)
+    blocked = {k: v for k, v in orders.items() if v > MAX_BUY_FRACTION * equity}
+    for k, v in blocked.items():
+        del orders[k]
+        note += f" BLOCKED: buy of {v:.2f} in {k} is above {MAX_BUY_FRACTION:.0%} of equity."
+    if (
+        ex is not None
+        and approve is not None
+        and orders
+        and not approve(orders, exec_prices)
+    ):
+        return {
+            "equity": equity,
+            "drawdown": dd,
+            "weights": report,
+            "orders": {},
+            "note": (note + " Orders NOT approved: nothing traded.").strip(),
+        }
     # sells first so cash is available for buys
     for k, v in sorted(orders.items(), key=lambda kv: kv[1]):
         if ex is not None and SLEEVES[k]["kind"] == "exchange":
@@ -273,12 +297,27 @@ def step(state: dict, history: dict, exec_prices: dict, when: str, ex=None) -> d
         "drawdown": dd,
         "weights": report,
         "orders": orders,
-        "note": note,
+        "note": note.strip(),
     }
 
 
 # ---------------------------------------------------------------- modes
-def run_today(live: bool) -> None:
+def ask_approval(orders: dict, prices: dict) -> bool:
+    """Show the planned real orders and wait for the user to type OUI.
+    Without a terminal (cron, CI) the answer is no."""
+    print("Ordres REELS prevus :")
+    for k, v in orders.items():
+        print(
+            f"  {'ACHAT' if v > 0 else 'VENTE'} {k}: {abs(v):.2f} {QUOTE} au prix ~{prices[k]}"
+        )
+    try:
+        return input("Tape OUI pour passer ces ordres : ").strip() == "OUI"
+    except EOFError:
+        print("pas de terminal : ordres refuses")
+        return False
+
+
+def run_today(live: bool, yes: bool = False) -> None:
     import ccxt
 
     exchange_id = os.getenv("BOT_EXCHANGE", "binance")
@@ -319,7 +358,8 @@ def run_today(live: bool) -> None:
         state["mode"] = "live"
         sync_live_state(ex, state)
     when = datetime.now(UTC).isoformat(timespec="seconds")
-    out = step(state, history, prices, when, ex if live else None)
+    approve = None if (yes or not live) else ask_approval
+    out = step(state, history, prices, when, ex if live else None, approve)
     state["last_run"] = today
     save_state(state)
     log_equity(today, state, prices, out)
@@ -434,6 +474,11 @@ def replay(cost_check: bool = True) -> pd.Series:
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--live", action="store_true", help="place real orders")
+    ap.add_argument(
+        "--yes",
+        action="store_true",
+        help="with --live: do not ask before each real order (unattended use only)",
+    )
     ap.add_argument("--replay", action="store_true", help="replay over local history")
     ap.add_argument(
         "--paper-csv", action="store_true", help="paper trade from data/*.csv"
@@ -444,4 +489,4 @@ if __name__ == "__main__":
     elif a.paper_csv:
         run_paper_csv()
     else:
-        run_today(a.live)
+        run_today(a.live, a.yes)

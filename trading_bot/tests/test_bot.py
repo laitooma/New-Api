@@ -178,3 +178,41 @@ def test_check_history_rejects_bad_data():
     for broken in (bad_price, stale, zero, holed, good.iloc[-50:]):
         with pytest.raises(bot.DataError):
             bot.check_history("x", broken)
+
+
+def test_live_orders_need_approval(tmp_path, monkeypatch):
+    bot.LOG = str(tmp_path / "t.csv")
+    # force a buy signal (the real recent data is in a downtrend: no orders)
+    monkeypatch.setattr(bot, "target_weights", lambda h: {k: 0.25 for k in bot.SLEEVES})
+    hist = {k: df for k in bot.SLEEVES}
+    prices = {k: 100.0 for k in bot.SLEEVES}
+    state = bot.new_state()
+    state["cash"], state["peak"] = 375.0, 375.0
+    ex = FakeExchange()
+    out = bot.step(state, hist, prices, "t", ex, approve=lambda o, p: False)
+    assert ex.orders == [] and "NOT approved" in out["note"]
+    bot.step(state, hist, prices, "t", ex, approve=lambda o, p: True)
+    assert ex.orders  # approved -> placed
+
+
+def test_no_terminal_means_no(monkeypatch):
+    def no_tty(prompt=""):
+        raise EOFError
+
+    monkeypatch.setattr("builtins.input", no_tty)
+    assert bot.ask_approval({"BTC": 10.0}, {"BTC": 1.0}) is False
+
+
+def test_oversized_buy_is_blocked_but_sells_are_not(tmp_path, monkeypatch):
+    bot.LOG = str(tmp_path / "t.csv")
+    hist = {k: df for k in bot.SLEEVES}
+    prices = {k: 100.0 for k in bot.SLEEVES}
+    monkeypatch.setattr(bot, "target_weights", lambda h: {k: 0.9 for k in bot.SLEEVES})
+    state = bot.new_state()
+    out = bot.step(state, hist, prices, "t")
+    assert "BLOCKED" in out["note"] and all(q == 0 for q in state["qty"].values())
+    # kill switch: a full sell is never blocked
+    state = bot.new_state()
+    state["cash"], state["qty"]["BTC"], state["peak"] = 0.0, 10.0, 10_000.0
+    bot.step(state, hist, prices, "t")
+    assert state["qty"]["BTC"] == 0
