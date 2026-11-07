@@ -24,6 +24,10 @@ import pandas as pd
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT_DIR = os.path.join(HERE, os.getenv("INTRADAY_STATE_DIR", "paper_intraday"))
 COST = 0.001
+# The rules were frozen on 2026-11-07 around 12:20 UTC, after hourly prices up
+# to 12:00 that day had been seen. Days up to the 7th are therefore in-sample;
+# only days from FIRST_DAY on count as an honest, out-of-sample test.
+FIRST_DAY = pd.Timestamp("2026-11-08", tz="UTC")
 MARKETS = {"BTC": "BTC/USD", "ETH": "ETH/USD", "GOLD": "PAXG/USD"}
 CSV_FILES = {"BTC": "BTC_USD_H1.csv", "ETH": "ETH_USD_H1.csv", "GOLD": "XAU_USD_H1.csv"}
 
@@ -82,6 +86,10 @@ def summary() -> None:
     )
 
 
+def is_out_of_sample(day: pd.Timestamp) -> bool:
+    return day.normalize() >= FIRST_DAY
+
+
 def run_today() -> None:
     """Record the most recent finished trading day. After 21:00 UTC that is
     today; before (e.g. a run delayed past midnight) it is yesterday."""
@@ -89,6 +97,11 @@ def run_today() -> None:
     today = (
         now.normalize() if now.hour >= 21 else now.normalize() - pd.Timedelta(days=1)
     )
+    if not is_out_of_sample(today):
+        print(
+            f"{today.date()} is before {FIRST_DAY.date()} (already seen), not recorded"
+        )
+        return
     for name, sym in MARKETS.items():
         df = closed_hourly(fetch_kraken(sym), now)
         bars = df[df.index.normalize() == today]
