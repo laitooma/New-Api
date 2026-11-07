@@ -63,7 +63,11 @@ def main():
         for t, c in new.items():
             rows[int(t)] = {k: c[k] for k in ["time", "open", "high", "low", "close"]}
         with open(path, "w", newline="") as f:
-            w = csv.DictWriter(f, fieldnames=["time", "open", "high", "low", "close"])
+            w = csv.DictWriter(
+                f,
+                fieldnames=["time", "open", "high", "low", "close"],
+                lineterminator="\n",
+            )
             w.writeheader()
             for t in sorted(rows):
                 w.writerow(rows[t])
