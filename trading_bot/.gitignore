@@ -5,3 +5,4 @@ replay_trades.csv
 __pycache__/
 .pytest_cache/
 .env
+replay_intraday/
