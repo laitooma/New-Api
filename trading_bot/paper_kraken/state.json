@@ -1,0 +1,12 @@
+{
+  "cash": 500.0,
+  "qty": {
+    "BTC": 0.0,
+    "ETH": 0.0,
+    "GOLD": 0.0
+  },
+  "peak": 500.0,
+  "halted": false,
+  "mode": "paper",
+  "last_run": "2026-11-07"
+}
