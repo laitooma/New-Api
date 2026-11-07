@@ -34,8 +34,8 @@ QUOTE = os.getenv("BOT_QUOTE", "USDC")
 FEE = 0.001  # exchange fee per side used in paper mode (Binance spot)
 SLIPPAGE = 0.001  # extra cost assumed in paper mode
 REBALANCE_BAND = 0.05  # trade a sleeve only if off target by > 5% of equity
-KILL_SWITCH_DD = 0.20
-MAX_BUY_FRACTION = 0.40  # a buy above 40% of equity can only be a bug or a bad price  # stop everything after a 20% fall from peak
+KILL_SWITCH_DD = 0.20  # stop everything after a 20% fall from peak
+MAX_BUY_FRACTION = 0.40  # a buy above 40% of equity can only be a bug or a bad price
 MIN_HISTORY = 101  # longest SMA (100) + 1
 
 # kind "exchange": traded automatically. kind "manual": the bot tells you
