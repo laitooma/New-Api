@@ -54,3 +54,10 @@ def test_asia_trade_closed_at_20h():
     held = pd.Series(np.r_[0.0, pos[:-1]], index=df.index)
     hours = set(held[held != 0].index.hour)
     assert hours and min(hours) >= 8 and max(hours) <= 19
+
+
+def test_only_unseen_days_are_recorded():
+    import pandas as pd
+
+    assert not ip.is_out_of_sample(pd.Timestamp("2026-11-07 22:00", tz="UTC"))
+    assert ip.is_out_of_sample(pd.Timestamp("2026-11-08 21:11", tz="UTC"))
