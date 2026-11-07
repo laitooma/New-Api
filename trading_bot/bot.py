@@ -26,8 +26,10 @@ import pandas as pd
 from strategies import sma_ensemble
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-STATE = os.path.join(HERE, "state.json")
-LOG = os.path.join(HERE, "trades.csv")
+STATE_DIR = os.getenv("BOT_STATE_DIR", HERE)
+STATE = os.path.join(STATE_DIR, "state.json")
+LOG = os.path.join(STATE_DIR, "trades.csv")
+EQUITY_LOG = os.path.join(STATE_DIR, "equity.csv")
 
 CAPITAL = 500.0            # starting capital (quote currency, e.g. EUR/USDC)
 QUOTE = os.getenv("BOT_QUOTE", "USDC")
@@ -245,6 +247,43 @@ def run_today(live: bool) -> None:
         print(line)
 
 
+def run_paper_csv() -> None:
+    """Paper trading from the local CSVs in data/ (kept up to date by
+    update_data.py). Decides on yesterday's closed candle and fills at
+    today's open, like the backtest. Runs at most once per UTC day."""
+    today = pd.Timestamp.now(tz="UTC").normalize()
+    data = {k: load_csv(s["csv"]) for k, s in SLEEVES.items()}
+    hist = {k: closed_daily(d) for k, d in data.items()}
+    stale = [k for k, h in hist.items() if (today - h.index[-1].normalize()).days > 4]
+    if stale:
+        sys.exit(f"data too old for {stale}: run update_data.py first. Nothing done.")
+    prices = {}
+    for k, d in data.items():
+        row = d[d.index.normalize() == today]
+        prices[k] = float(row["open"].iloc[0]) if len(row) else float(hist[k]["close"].iloc[-1])
+    state = load_state()
+    if state.get("last_run") == str(today.date()):
+        print(f"already ran for {today.date()}, nothing done")
+        return
+    out = step(state, hist, prices, today.isoformat())
+    state["last_run"] = str(today.date())
+    save_state(state)
+    equity = state["cash"] + sum(state["qty"][k] * prices[k] for k in SLEEVES)
+    new = not os.path.exists(EQUITY_LOG)
+    with open(EQUITY_LOG, "a", newline="") as f:
+        w = csv.writer(f)
+        if new:
+            w.writerow(["date", "equity"] + [f"w_{k}" for k in SLEEVES])
+        w.writerow([today.date(), round(equity, 2)] + [round(out.get("weights", {}).get(k, 0), 3) for k in SLEEVES])
+    print(f"{today.date()} paper equity {equity:.2f} ({(equity/CAPITAL-1)*100:+.2f}% since start)")
+    if out.get("note"):
+        print("  " + out["note"])
+    for k in SLEEVES:
+        print(f"  {k:5s} target {out.get('weights', {}).get(k, 0)*100:5.1f}%  held {state['qty'][k]*prices[k]:7.2f}")
+    for k, v in out.get("orders", {}).items():
+        print(f"  order {k}: {'buy' if v > 0 else 'sell'} {abs(v):.2f}")
+
+
 def replay(cost_check: bool = True) -> pd.Series:
     """Run the exact bot logic day by day over the local CSV history,
     deciding on closed candles up to day t and filling at day t+1's open."""
@@ -285,8 +324,11 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--live", action="store_true", help="place real orders")
     ap.add_argument("--replay", action="store_true", help="replay over local history")
+    ap.add_argument("--paper-csv", action="store_true", help="paper trade from data/*.csv")
     a = ap.parse_args()
     if a.replay:
         replay()
+    elif a.paper_csv:
+        run_paper_csv()
     else:
         run_today(a.live)
