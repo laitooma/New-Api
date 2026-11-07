@@ -152,10 +152,28 @@ def save_state(s: dict) -> None:
         json.dump(s, f, indent=2)
 
 
+TRADE_FIELDS = [
+    "time",
+    "mode",
+    "sleeve",
+    "side",
+    "value",
+    "price",
+    "reason",
+    "order_id",
+]
+
+
 def log_trade(row: dict) -> None:
+    """Append one order to the trade log. Columns are fixed (paper and live rows
+    share one layout); a file started with an older layout keeps its header."""
+    fields = TRADE_FIELDS
+    if os.path.exists(LOG):
+        with open(LOG) as f:
+            fields = next(csv.reader(f), TRADE_FIELDS) or TRADE_FIELDS
     new = not os.path.exists(LOG)
     with open(LOG, "a", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=list(row))
+        w = csv.DictWriter(f, fieldnames=fields, restval="", extrasaction="ignore")
         if new:
             w.writeheader()
         w.writerow(row)
@@ -175,7 +193,9 @@ def plan_orders(state: dict, prices: dict, weights: dict) -> tuple:
     return equity, orders
 
 
-def paper_fill(state: dict, k: str, value: float, price: float, when: str) -> None:
+def paper_fill(
+    state: dict, k: str, value: float, price: float, when: str, reason: str = ""
+) -> None:
     cost = FEE + SLIPPAGE
     if value > 0:
         value = min(value, state["cash"] / (1 + cost))
@@ -194,11 +214,14 @@ def paper_fill(state: dict, k: str, value: float, price: float, when: str) -> No
             "side": "buy" if value > 0 else "sell",
             "value": round(value, 2),
             "price": price,
+            "reason": reason,
         }
     )
 
 
-def live_fill(ex, k: str, value: float, price: float, when: str) -> None:
+def live_fill(
+    ex, k: str, value: float, price: float, when: str, reason: str = ""
+) -> None:
     sym = SLEEVES[k]["symbol"]
     m = ex.market(sym)
     amount = float(ex.amount_to_precision(sym, abs(value) / price))
@@ -216,6 +239,7 @@ def live_fill(ex, k: str, value: float, price: float, when: str) -> None:
             "side": side,
             "value": round(value, 2),
             "price": price,
+            "reason": reason,
             "order_id": o.get("id"),
         }
     )
@@ -284,14 +308,23 @@ def step(
             "orders": {},
             "note": (note + " Orders NOT approved: nothing traded.").strip(),
         }
+    held = {
+        k: state["qty"][k] * exec_prices[k] / equity if equity else 0 for k in SLEEVES
+    }
+    why = {
+        k: "kill switch"
+        if state["halted"]
+        else f"signal: target {weights.get(k, 0) * 100:.0f}% (held {held[k] * 100:.0f}%)"
+        for k in orders
+    }
     # sells first so cash is available for buys
     for k, v in sorted(orders.items(), key=lambda kv: kv[1]):
         if ex is not None and SLEEVES[k]["kind"] == "exchange":
             if v < 0:  # never sell more than we hold
                 v = -min(-v, state["qty"][k] * exec_prices[k])
-            live_fill(ex, k, v, exec_prices[k], when)
+            live_fill(ex, k, v, exec_prices[k], when, why[k])
         elif ex is None:
-            paper_fill(state, k, v, exec_prices[k], when)
+            paper_fill(state, k, v, exec_prices[k], when, why[k])
     return {
         "equity": equity,
         "drawdown": dd,

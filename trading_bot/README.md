@@ -57,6 +57,16 @@ or SMA50 : +31,6 % / +31,6 %...).
   il faut donc merger d'abord. Lancement manuel possible via l'onglet Actions →
   « Run workflow ».
 
+## Changer la stratégie : la règle
+Toute variante doit passer `walkforward.py` : réglage choisi sur le passé seulement,
+jugé sur la période suivante jamais vue, fenêtre après fenêtre, frais compris. Elle
+n'est retenue que si elle bat la stratégie actuelle sur au moins 60 % des fenêtres
+**et** au total, **et** pour au moins 75 % des 16 tailles de fenêtres testées.
+Exemple (7 nov. 2026) : « meilleure moyenne mobile du moment » gagnait avec un réglage
+de fenêtres et perdait avec la plupart des autres (4/16) : rejetée.
+
+Chaque ordre du journal (`trades.csv`) indique sa raison : signal et cible, ou arrêt d'urgence.
+
 ## Installation
 ```bash
 pip install -r requirements.txt
