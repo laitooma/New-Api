@@ -18,11 +18,9 @@ import csv
 import json
 import os
 import sys
-import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pandas as pd
-
 from strategies import sma_ensemble
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -31,20 +29,20 @@ STATE = os.path.join(STATE_DIR, "state.json")
 LOG = os.path.join(STATE_DIR, "trades.csv")
 EQUITY_LOG = os.path.join(STATE_DIR, "equity.csv")
 
-CAPITAL = 500.0            # starting capital (quote currency, e.g. EUR/USDC)
+CAPITAL = 500.0  # starting capital (quote currency, e.g. EUR/USDC)
 QUOTE = os.getenv("BOT_QUOTE", "USDC")
-FEE = 0.001                # exchange fee per side used in paper mode (Binance spot)
-SLIPPAGE = 0.001           # extra cost assumed in paper mode
-REBALANCE_BAND = 0.05      # trade a sleeve only if off target by > 5% of equity
-KILL_SWITCH_DD = 0.20      # stop everything after a 20% fall from peak
-MIN_HISTORY = 101          # longest SMA (100) + 1
+FEE = 0.001  # exchange fee per side used in paper mode (Binance spot)
+SLIPPAGE = 0.001  # extra cost assumed in paper mode
+REBALANCE_BAND = 0.05  # trade a sleeve only if off target by > 5% of equity
+KILL_SWITCH_DD = 0.20  # stop everything after a 20% fall from peak
+MIN_HISTORY = 101  # longest SMA (100) + 1
 
 # kind "exchange": traded automatically. kind "manual": the bot tells you
 # what to hold, you place the order at your broker (e.g. a Nasdaq-100 ETF).
 SLEEVES = {
-    "BTC":    {"kind": "exchange", "symbol": f"BTC/{QUOTE}",  "csv": "BTC_USD_D.csv"},
-    "ETH":    {"kind": "exchange", "symbol": f"ETH/{QUOTE}",  "csv": "ETH_USD_D.csv"},
-    "GOLD":   {"kind": "exchange", "symbol": f"PAXG/{QUOTE}", "csv": "XAU_USD_D.csv"},
+    "BTC": {"kind": "exchange", "symbol": f"BTC/{QUOTE}", "csv": "BTC_USD_D.csv"},
+    "ETH": {"kind": "exchange", "symbol": f"ETH/{QUOTE}", "csv": "ETH_USD_D.csv"},
+    "GOLD": {"kind": "exchange", "symbol": f"PAXG/{QUOTE}", "csv": "XAU_USD_D.csv"},
 }
 # Optional 4th sleeve, traded by hand at a broker. Off by default: it needs ~5
 # small manual orders a month, and a 1 EUR broker fee on a 30 EUR order is 3%.
@@ -68,12 +66,15 @@ def fetch_exchange(ex, symbol: str) -> pd.DataFrame:
 
 def fetch_yahoo(ticker: str) -> pd.DataFrame:
     import requests
+
     url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}?range=1y&interval=1d"
     j = requests.get(url, timeout=20, headers={"User-Agent": "trend-bot"}).json()
     res = j["chart"]["result"][0]
     q = res["indicators"]["quote"][0]
-    df = pd.DataFrame({k: q[k] for k in ["open", "high", "low", "close"]},
-                      index=pd.to_datetime(res["timestamp"], unit="s", utc=True).normalize())
+    df = pd.DataFrame(
+        {k: q[k] for k in ["open", "high", "low", "close"]},
+        index=pd.to_datetime(res["timestamp"], unit="s", utc=True).normalize(),
+    )
     return closed_daily(df.dropna())
 
 
@@ -89,14 +90,21 @@ def target_weights(history: dict) -> dict:
     w = {}
     for name, df in history.items():
         if len(df) < MIN_HISTORY:
-            raise RuntimeError(f"{name}: only {len(df)} daily candles, need {MIN_HISTORY}")
+            raise RuntimeError(
+                f"{name}: only {len(df)} daily candles, need {MIN_HISTORY}"
+            )
         w[name] = sma_ensemble(df).iloc[-1] / len(SLEEVES)
     return w
 
 
 def new_state() -> dict:
-    return {"cash": CAPITAL, "qty": {k: 0.0 for k in SLEEVES}, "peak": CAPITAL,
-            "halted": False, "mode": "paper"}
+    return {
+        "cash": CAPITAL,
+        "qty": {k: 0.0 for k in SLEEVES},
+        "peak": CAPITAL,
+        "halted": False,
+        "mode": "paper",
+    }
 
 
 def load_state() -> dict:
@@ -127,7 +135,9 @@ def plan_orders(state: dict, prices: dict, weights: dict) -> tuple:
     for k in SLEEVES:
         current = state["qty"][k] * prices[k]
         wanted = weights.get(k, 0.0) * equity
-        if abs(wanted - current) > REBALANCE_BAND * equity or (wanted == 0 and current > 0):
+        if abs(wanted - current) > REBALANCE_BAND * equity or (
+            wanted == 0 and current > 0
+        ):
             orders[k] = wanted - current
     return equity, orders
 
@@ -143,8 +153,16 @@ def paper_fill(state: dict, k: str, value: float, price: float, when: str) -> No
         state["qty"][k] -= qty
         state["cash"] += qty * price * (1 - cost)
         value = -qty * price
-    log_trade({"time": when, "mode": "paper", "sleeve": k, "side": "buy" if value > 0 else "sell",
-               "value": round(value, 2), "price": price})
+    log_trade(
+        {
+            "time": when,
+            "mode": "paper",
+            "sleeve": k,
+            "side": "buy" if value > 0 else "sell",
+            "value": round(value, 2),
+            "price": price,
+        }
+    )
 
 
 def live_fill(ex, k: str, value: float, price: float, when: str) -> None:
@@ -157,8 +175,17 @@ def live_fill(ex, k: str, value: float, price: float, when: str) -> None:
         return
     side = "buy" if value > 0 else "sell"
     o = ex.create_order(sym, "market", side, amount)
-    log_trade({"time": when, "mode": "live", "sleeve": k, "side": side,
-               "value": round(value, 2), "price": price, "order_id": o.get("id")})
+    log_trade(
+        {
+            "time": when,
+            "mode": "live",
+            "sleeve": k,
+            "side": side,
+            "value": round(value, 2),
+            "price": price,
+            "order_id": o.get("id"),
+        }
+    )
     print(f"  {k}: {side} {amount} {sym} (~{abs(value):.2f} {QUOTE})")
 
 
@@ -178,7 +205,10 @@ def step(state: dict, history: dict, exec_prices: dict, when: str, ex=None) -> d
     dd = 1 - equity / state["peak"]
 
     if state["halted"]:
-        return {"equity": equity, "note": "HALTED (kill switch) - edit state.json to resume"}
+        return {
+            "equity": equity,
+            "note": "HALTED (kill switch) - edit state.json to resume",
+        }
 
     if dd >= KILL_SWITCH_DD:
         weights = {k: 0.0 for k in SLEEVES}
@@ -192,33 +222,46 @@ def step(state: dict, history: dict, exec_prices: dict, when: str, ex=None) -> d
         # live: only exchange sleeves live on the exchange account, so each gets
         # an equal share of THAT account; the manual sleeve is held elsewhere.
         n_ex = sum(1 for s in SLEEVES.values() if s["kind"] == "exchange")
-        weights = {k: (w * len(SLEEVES) / n_ex if SLEEVES[k]["kind"] == "exchange" else 0.0)
-                   for k, w in weights.items()}
+        weights = {
+            k: (w * len(SLEEVES) / n_ex if SLEEVES[k]["kind"] == "exchange" else 0.0)
+            for k, w in weights.items()
+        }
 
     equity, orders = plan_orders(state, exec_prices, weights)
     # sells first so cash is available for buys
     for k, v in sorted(orders.items(), key=lambda kv: kv[1]):
         if ex is not None and SLEEVES[k]["kind"] == "exchange":
-            if v < 0:   # never sell more than we hold
+            if v < 0:  # never sell more than we hold
                 v = -min(-v, state["qty"][k] * exec_prices[k])
             live_fill(ex, k, v, exec_prices[k], when)
         elif ex is None:
             paper_fill(state, k, v, exec_prices[k], when)
-    return {"equity": equity, "drawdown": dd, "weights": report, "orders": orders, "note": note}
+    return {
+        "equity": equity,
+        "drawdown": dd,
+        "weights": report,
+        "orders": orders,
+        "note": note,
+    }
 
 
 # ---------------------------------------------------------------- modes
 def run_today(live: bool) -> None:
     import ccxt
+
     exchange_id = os.getenv("BOT_EXCHANGE", "binance")
     key, secret = os.getenv("BOT_API_KEY"), os.getenv("BOT_API_SECRET")
     if live and not (key and secret):
         sys.exit("--live needs BOT_API_KEY and BOT_API_SECRET set. Nothing done.")
-    ex = getattr(ccxt, exchange_id)({"apiKey": key, "secret": secret, "enableRateLimit": True})
+    ex = getattr(ccxt, exchange_id)(
+        {"apiKey": key, "secret": secret, "enableRateLimit": True}
+    )
     ex.load_markets()
     for k, s in SLEEVES.items():
         if s["kind"] == "exchange" and s["symbol"] not in ex.markets:
-            sys.exit(f"{s['symbol']} not listed on {exchange_id}. Set BOT_QUOTE or edit SLEEVES.")
+            sys.exit(
+                f"{s['symbol']} not listed on {exchange_id}. Set BOT_QUOTE or edit SLEEVES."
+            )
 
     history, prices = {}, {}
     for k, s in SLEEVES.items():
@@ -230,21 +273,43 @@ def run_today(live: bool) -> None:
             prices[k] = float(history[k]["close"].iloc[-1])
 
     state = load_state()
+    today = str(datetime.now(UTC).date())
+    if state.get("last_run") == today:
+        print(f"already ran for {today}, nothing done")
+        return
     if live:
         state["mode"] = "live"
         sync_live_state(ex, state)
-    when = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    when = datetime.now(UTC).isoformat(timespec="seconds")
     out = step(state, history, prices, when, ex if live else None)
+    state["last_run"] = today
     save_state(state)
+    log_equity(today, state, prices, out)
 
-    print(f"{when}  mode={'LIVE' if live else 'paper'}  equity={out['equity']:.2f} {QUOTE}")
+    print(
+        f"{when}  mode={'LIVE' if live else 'paper'}  equity={out['equity']:.2f} {QUOTE}"
+    )
     if out.get("note"):
         print("  " + out["note"])
     for k, w in out.get("weights", {}).items():
-        line = f"  {k:7s} target {w*100:5.1f}% of equity"
+        line = f"  {k:7s} target {w * 100:5.1f}% of equity"
         if SLEEVES[k]["kind"] == "manual":
-            line += f"  -> MANUAL: hold {w*len(SLEEVES)*100:.0f}% of your Nasdaq sleeve in a Nasdaq-100 ETF"
+            line += f"  -> MANUAL: hold {w * len(SLEEVES) * 100:.0f}% of your Nasdaq sleeve in a Nasdaq-100 ETF"
         print(line)
+
+
+def log_equity(day, state: dict, prices: dict, out: dict) -> float:
+    equity = state["cash"] + sum(state["qty"][k] * prices[k] for k in SLEEVES)
+    new = not os.path.exists(EQUITY_LOG)
+    with open(EQUITY_LOG, "a", newline="") as f:
+        w = csv.writer(f)
+        if new:
+            w.writerow(["date", "equity"] + [f"w_{k}" for k in SLEEVES])
+        weights = out.get("weights", {})
+        w.writerow(
+            [day, round(equity, 2)] + [round(weights.get(k, 0), 3) for k in SLEEVES]
+        )
+    return equity
 
 
 def run_paper_csv() -> None:
@@ -260,7 +325,9 @@ def run_paper_csv() -> None:
     prices = {}
     for k, d in data.items():
         row = d[d.index.normalize() == today]
-        prices[k] = float(row["open"].iloc[0]) if len(row) else float(hist[k]["close"].iloc[-1])
+        prices[k] = (
+            float(row["open"].iloc[0]) if len(row) else float(hist[k]["close"].iloc[-1])
+        )
     state = load_state()
     if state.get("last_run") == str(today.date()):
         print(f"already ran for {today.date()}, nothing done")
@@ -268,18 +335,16 @@ def run_paper_csv() -> None:
     out = step(state, hist, prices, today.isoformat())
     state["last_run"] = str(today.date())
     save_state(state)
-    equity = state["cash"] + sum(state["qty"][k] * prices[k] for k in SLEEVES)
-    new = not os.path.exists(EQUITY_LOG)
-    with open(EQUITY_LOG, "a", newline="") as f:
-        w = csv.writer(f)
-        if new:
-            w.writerow(["date", "equity"] + [f"w_{k}" for k in SLEEVES])
-        w.writerow([today.date(), round(equity, 2)] + [round(out.get("weights", {}).get(k, 0), 3) for k in SLEEVES])
-    print(f"{today.date()} paper equity {equity:.2f} ({(equity/CAPITAL-1)*100:+.2f}% since start)")
+    equity = log_equity(today.date(), state, prices, out)
+    print(
+        f"{today.date()} paper equity {equity:.2f} ({(equity / CAPITAL - 1) * 100:+.2f}% since start)"
+    )
     if out.get("note"):
         print("  " + out["note"])
     for k in SLEEVES:
-        print(f"  {k:5s} target {out.get('weights', {}).get(k, 0)*100:5.1f}%  held {state['qty'][k]*prices[k]:7.2f}")
+        print(
+            f"  {k:5s} target {out.get('weights', {}).get(k, 0) * 100:5.1f}%  held {state['qty'][k] * prices[k]:7.2f}"
+        )
     for k, v in out.get("orders", {}).items():
         print(f"  order {k}: {'buy' if v > 0 else 'sell'} {abs(v):.2f}")
 
@@ -307,16 +372,22 @@ def replay(cost_check: bool = True) -> pd.Series:
         px = {}
         for k, d in data.items():
             row = d[d.index.normalize() == nxt]
-            px[k] = float(row["open"].iloc[0]) if len(row) else float(hist[k]["close"].iloc[-1])
+            px[k] = (
+                float(row["open"].iloc[0])
+                if len(row)
+                else float(hist[k]["close"].iloc[-1])
+            )
         out = step(state, hist, px, nxt.isoformat())
         curve[nxt] = out["equity"]
     eq = pd.Series(curve)
     mark = {k: float(d["close"].iloc[-1]) for k, d in data.items()}
     final = state["cash"] + sum(state["qty"][k] * mark[k] for k in SLEEVES)
     peak = eq.cummax()
-    print(f"replay {eq.index[0].date()} -> {eq.index[-1].date()}: start {CAPITAL:.0f}, "
-          f"end {final:.2f} ({(final/CAPITAL-1)*100:+.1f}%), max drawdown {((eq/peak)-1).min()*100:.1f}%, "
-          f"halted={state['halted']}")
+    print(
+        f"replay {eq.index[0].date()} -> {eq.index[-1].date()}: start {CAPITAL:.0f}, "
+        f"end {final:.2f} ({(final / CAPITAL - 1) * 100:+.1f}%), max drawdown {((eq / peak) - 1).min() * 100:.1f}%, "
+        f"halted={state['halted']}"
+    )
     return eq
 
 
@@ -324,7 +395,9 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--live", action="store_true", help="place real orders")
     ap.add_argument("--replay", action="store_true", help="replay over local history")
-    ap.add_argument("--paper-csv", action="store_true", help="paper trade from data/*.csv")
+    ap.add_argument(
+        "--paper-csv", action="store_true", help="paper trade from data/*.csv"
+    )
     a = ap.parse_args()
     if a.replay:
         replay()

@@ -28,6 +28,28 @@ jobs:
       - name: Tests (pytest)
         run: pytest -v
 
+  trading-bot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Installer les dependances du bot
+        run: pip install pandas numpy pytest backtesting==0.6.4
+
+      - name: Tests du bot (pas de lecture du futur, frais, arret d'urgence)
+        working-directory: trading_bot
+        run: python -m pytest -q tests
+
+      - name: Rejeu du bot + controle croise avec backtesting.py
+        working-directory: trading_bot
+        run: |
+          python bot.py --replay
+          python crosscheck.py
+
   docker:
     needs: lint-and-test
     runs-on: ubuntu-latest

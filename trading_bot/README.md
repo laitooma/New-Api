@@ -41,10 +41,26 @@ marché monte, de sortir quand il baisse, et donc d'éviter les grosses chutes.
    résultat dépendait trop du nombre de jours choisi). Pour tout revoir :
    `python research.py`.
 
+## Vérification indépendante
+`python crosscheck.py` recalcule les stratégies avec la bibliothèque open source
+[backtesting.py](https://github.com/kernc/backtesting.py). Sur les 8 combinaisons
+testées, les deux moteurs concordent à 0,1 point près (BTC SMA50 : -6,6 % / -6,6 % ;
+or SMA50 : +31,6 % / +31,6 %...).
+
+## Automatisation GitHub Actions
+- `ci.yml`, job `trading-bot` : à chaque push, lance les tests, le rejeu et le
+  contrôle croisé.
+- `trading-bot-paper.yml` : simulation chaque jour à 00:23 UTC, avec les prix
+  publics de Kraken. Les résultats sont enregistrés dans `paper_kraken/` :
+  `equity.csv` pour la courbe, `trades.csv` pour les ordres. Aucune clé API,
+  aucun argent réel. **GitHub ne lance ce workflow que depuis la branche `main`** :
+  il faut donc merger d'abord. Lancement manuel possible via l'onglet Actions →
+  « Run workflow ».
+
 ## Installation
 ```bash
 pip install -r requirements.txt
-python -m pytest -q tests        # 9 tests : pas de lecture du futur, frais, arrêt d'urgence...
+python -m pytest -q tests        # 10 tests : pas de lecture du futur, frais, arrêt d'urgence...
 python bot.py --replay           # rejoue le bot sur l'historique local
 ```
 

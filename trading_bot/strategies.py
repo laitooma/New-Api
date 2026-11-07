@@ -50,8 +50,13 @@ def rsi(close: pd.Series, n: int) -> pd.Series:
     return 100 - 100 / (1 + rs)
 
 
-def rsi_reversion(df: pd.DataFrame, n: int = 2, buy_below: float = 10,
-                  sell_above: float = 70, trend: int = 100) -> pd.Series:
+def rsi_reversion(
+    df: pd.DataFrame,
+    n: int = 2,
+    buy_below: float = 10,
+    sell_above: float = 70,
+    trend: int = 100,
+) -> pd.Series:
     """Short-term mean reversion: buy a deep RSI dip inside an uptrend
     (close above the `trend`-day SMA), exit when RSI recovers."""
     r = rsi(df["close"], n)
@@ -61,14 +66,21 @@ def rsi_reversion(df: pd.DataFrame, n: int = 2, buy_below: float = 10,
     for i in range(len(df)):
         if inpos == 0.0 and r.iloc[i] < buy_below and df["close"].iloc[i] > sma.iloc[i]:
             inpos = 1.0
-        elif inpos == 1.0 and (r.iloc[i] > sell_above or df["close"].iloc[i] < sma.iloc[i]):
+        elif inpos == 1.0 and (
+            r.iloc[i] > sell_above or df["close"].iloc[i] < sma.iloc[i]
+        ):
             inpos = 0.0
         pos[i] = inpos
     return pd.Series(pos, index=df.index)
 
 
-def vol_target(df: pd.DataFrame, base: pd.Series, target_ann_vol: float = 0.40,
-               lookback: int = 20, periods: int = 365) -> pd.Series:
+def vol_target(
+    df: pd.DataFrame,
+    base: pd.Series,
+    target_ann_vol: float = 0.40,
+    lookback: int = 20,
+    periods: int = 365,
+) -> pd.Series:
     """Scale a 0/1 signal down when recent volatility is high, never above 1
     (no leverage). Keeps risk roughly constant across calm and wild markets."""
     rets = df["close"].pct_change()

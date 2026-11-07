@@ -24,11 +24,11 @@ def run(df: pd.DataFrame, target: pd.Series, cost: float) -> pd.Series:
     eq = np.ones(len(df))
     pos = 0.0
     for t in range(1, len(df)):
-        new = tgt[t - 1]                       # decided at yesterday's close
-        gap = o[t] / c[t - 1] - 1              # overnight move, old position
-        intraday = c[t] / o[t] - 1             # open -> close, new position
+        new = tgt[t - 1]  # decided at yesterday's close
+        gap = o[t] / c[t - 1] - 1  # overnight move, old position
+        intraday = c[t] / o[t] - 1  # open -> close, new position
         e = eq[t - 1] * (1 + pos * gap)
-        e *= 1 - abs(new - pos) * cost         # trading cost at the open
+        e *= 1 - abs(new - pos) * cost  # trading cost at the open
         e *= 1 + new * intraday
         eq[t] = e
         pos = new
@@ -52,5 +52,7 @@ def metrics(eq: pd.Series, target: pd.Series, periods: int) -> dict:
         "sharpe": round(sharpe, 2),
         "trades": trades,
         "exposure_%": round(t.mean() * 100, 0),
-        "pos_months_%": round((monthly > 0).mean() * 100, 0) if len(monthly) else np.nan,
+        "pos_months_%": round((monthly > 0).mean() * 100, 0)
+        if len(monthly)
+        else np.nan,
     }
