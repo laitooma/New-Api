@@ -51,6 +51,28 @@ jobs:
           python crosscheck.py
           python intraday_paper.py --csv
 
+  terraform:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.17.1"
+
+      - name: Format (terraform fmt)
+        run: terraform fmt -check -recursive
+
+      # Pas de compte AWS ici : on verifie seulement que le code est valide
+      - name: Init sans backend
+        run: terraform init -backend=false -input=false
+
+      - name: Validate
+        run: terraform validate
+
   docker:
     needs: lint-and-test
     runs-on: ubuntu-latest
