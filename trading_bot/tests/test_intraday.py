@@ -80,3 +80,13 @@ def test_record_never_writes_a_day_twice(tmp_path, monkeypatch):
         ip.record("2026-11-08", "BTC", {"trades": 1, "pnl_%": 0.5})
     assert len((tmp_path / "days.csv").read_text().strip().splitlines()) == 2
     assert ("2026-11-08", "BTC") in ip.recorded()
+
+
+def test_summary_keeps_a_market_missing_on_the_last_day(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(ip, "OUT_DIR", str(tmp_path))
+    monkeypatch.setattr(ip, "MARKETS", {"BTC": "", "ETH": ""})
+    ip.record("2026-11-08", "BTC", {"trades": 1, "pnl_%": 10.0})
+    ip.record("2026-11-08", "ETH", {"trades": 1, "pnl_%": -50.0})
+    ip.record("2026-11-09", "BTC", {"trades": 1, "pnl_%": 0.0})
+    ip.summary()
+    assert "-20.00%" in capsys.readouterr().out  # (1.10 + 0.50) / 2 - 1

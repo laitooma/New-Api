@@ -114,6 +114,7 @@ trader, et refuse de démarrer sinon.
 ## Fichiers
 - `strategies.py` — les signaux
 - `backtest.py` — moteur de test (signal à la clôture, exécution à l'ouverture suivante, frais)
+- en simulation, `bot.py` exécute au prix d'ouverture du jour (comme le backtest), même si GitHub lance le passage avec des heures de retard ; en réel, au prix du moment
 - `research.py`, `portfolio.py` — comparaison de toutes les stratégies
 - `bot.py` — le bot (simulation / réel / rejeu)
 - `data/` — historique journalier (source : TraderWAI)
