@@ -90,11 +90,24 @@ def check_history(name: str, df: pd.DataFrame, today=None) -> None:
         raise DataError(f"{name}: {move:.0%} one-day move, looks like a bad price")
 
 
-def fetch_exchange(ex, symbol: str) -> pd.DataFrame:
+def fetch_daily(ex, symbol: str) -> pd.DataFrame:
+    """Daily candles, today's still-forming one included (last row)."""
     rows = ex.fetch_ohlcv(symbol, "1d", limit=200)
     df = pd.DataFrame(rows, columns=["t", "open", "high", "low", "close", "vol"])
     df.index = pd.to_datetime(df["t"], unit="ms", utc=True)
-    return closed_daily(df[["open", "high", "low", "close"]])
+    return df[["open", "high", "low", "close"]]
+
+
+def fetch_exchange(ex, symbol: str) -> pd.DataFrame:
+    return closed_daily(fetch_daily(ex, symbol))
+
+
+def todays_open(daily: pd.DataFrame):
+    """Open of today's UTC candle, or None when the exchange has none yet."""
+    row = daily[daily.index >= pd.Timestamp.now(tz="UTC").normalize()]
+    if len(row) and row["open"].iloc[0] > 0:
+        return float(row["open"].iloc[0])
+    return None
 
 
 def fetch_yahoo(ticker: str) -> pd.DataFrame:
@@ -301,6 +314,9 @@ def step(
         and orders
         and not approve(orders, exec_prices)
     ):
+        # a refused kill-switch sale must be proposed again at the next run:
+        # staying "halted" here would leave the positions unsold for good
+        state["halted"] = False
         return {
             "equity": equity,
             "drawdown": dd,
@@ -370,8 +386,14 @@ def run_today(live: bool, yes: bool = False) -> None:
     history, prices = {}, {}
     for k, s in SLEEVES.items():
         if s["kind"] == "exchange":
-            history[k] = fetch_exchange(ex, s["symbol"])
-            prices[k] = float(ex.fetch_ticker(s["symbol"])["last"])
+            daily = fetch_daily(ex, s["symbol"])
+            history[k] = closed_daily(daily)
+            # paper: fill at today's open, as the backtest does, so a run that
+            # GitHub starts hours late is not judged on a different price.
+            # live: a real order can only get the current price.
+            prices[k] = (None if live else todays_open(daily)) or float(
+                ex.fetch_ticker(s["symbol"])["last"]
+            )
         else:
             history[k] = fetch_yahoo(s["yahoo"])
             prices[k] = float(history[k]["close"].iloc[-1])
@@ -388,8 +410,13 @@ def run_today(live: bool, yes: bool = False) -> None:
         print(f"already ran for {today}, nothing done")
         return
     if live:
+        first_live = state.get("mode") != "live"
         state["mode"] = "live"
         sync_live_state(ex, state)
+        if first_live:
+            # the paper peak (500) says nothing about the real account: keeping
+            # it would fire the kill switch at once on a smaller real balance
+            state["peak"], _ = plan_orders(state, prices, {})
     when = datetime.now(UTC).isoformat(timespec="seconds")
     approve = None if (yes or not live) else ask_approval
     out = step(state, history, prices, when, ex if live else None, approve)

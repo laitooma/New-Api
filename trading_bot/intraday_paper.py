@@ -76,9 +76,10 @@ def summary() -> None:
         return
     d = pd.read_csv(path)
     # equal thirds of the capital, each compounding its own daily results
-    eq = (
-        1 + d.pivot_table(index="date", columns="market", values="pnl_%") / 100
-    ).cumprod()
+    # a market with no row on a day earned 0% that day (it must not vanish
+    # from the total, which is what a missing value on the last day did)
+    daily = d.pivot_table(index="date", columns="market", values="pnl_%")
+    eq = (1 + daily.reindex(columns=list(MARKETS)).fillna(0.0) / 100).cumprod()
     total = (eq.iloc[-1].mean() - 1) * 100
     print(
         f"simulation day trading: {d['date'].nunique()} jours, "

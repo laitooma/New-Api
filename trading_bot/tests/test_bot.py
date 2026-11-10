@@ -216,3 +216,43 @@ def test_oversized_buy_is_blocked_but_sells_are_not(tmp_path, monkeypatch):
     state["cash"], state["qty"]["BTC"], state["peak"] = 0.0, 10.0, 10_000.0
     bot.step(state, hist, prices, "t")
     assert state["qty"]["BTC"] == 0
+
+
+def test_refused_kill_switch_sale_is_proposed_again(tmp_path):
+    bot.LOG = str(tmp_path / "t.csv")
+    prices = {k: 100.0 for k in bot.SLEEVES}
+    state = bot.new_state()
+    state["cash"], state["qty"]["BTC"], state["peak"] = 0.0, 1.0, 1000.0
+    ex = FakeExchange()
+    out = bot.step(state, {}, prices, "t", ex, approve=lambda o, p: False)
+    assert "KILL SWITCH" in out["note"] and ex.orders == []
+    assert state["halted"] is False  # not stuck: positions are still held
+    bot.step(state, {}, prices, "t", ex, approve=lambda o, p: True)
+    assert state["halted"] is True and ex.orders  # sold on the next run
+
+
+def test_paper_fills_at_todays_open_not_at_run_time(tmp_path, monkeypatch):
+    import types
+
+    today = pd.Timestamp.now(tz="UTC").normalize()
+
+    class Ex(FakeCcxtExchange):
+        def fetch_ohlcv(self, symbol, tf, limit):
+            rows = super().fetch_ohlcv(symbol, tf, limit)
+            return rows + [[int(today.timestamp() * 1000), 111.0, 130, 100, 125.0, 0]]
+
+        def fetch_ticker(self, symbol):
+            return {"last": 125.0}
+
+    seen = {}
+    monkeypatch.setitem(sys.modules, "ccxt", types.SimpleNamespace(binance=Ex))
+    monkeypatch.delenv("BOT_EXCHANGE", raising=False)
+    monkeypatch.setattr(bot, "STATE", str(tmp_path / "s.json"))
+    monkeypatch.setattr(bot, "LOG", str(tmp_path / "t.csv"))
+    monkeypatch.setattr(bot, "EQUITY_LOG", str(tmp_path / "e.csv"))
+    monkeypatch.setattr(bot, "check_history", lambda *a, **k: None)
+    monkeypatch.setattr(
+        bot, "step", lambda s, h, px, *a, **k: seen.update(px) or {"equity": 500.0}
+    )
+    bot.run_today(live=False)
+    assert set(seen.values()) == {111.0}
