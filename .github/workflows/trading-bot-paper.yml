@@ -48,7 +48,8 @@ jobs:
         run: |
           git config user.name "trading-bot"
           git config user.email "trading-bot@users.noreply.github.com"
-          git add trading_bot/paper_kraken
+          # le dossier n'existe pas tant qu'aucun jour n'a ete enregistre
+          if [ -d trading_bot/paper_kraken ]; then git add trading_bot/paper_kraken; fi
           if git diff --cached --quiet; then
             echo "Rien de nouveau"
           else
