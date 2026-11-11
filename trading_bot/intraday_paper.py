@@ -39,6 +39,23 @@ def day_result(bars: pd.DataFrame) -> dict:
     return {"pnl_%": r["total_%"], "trades": r["trades"]}
 
 
+MAX_HOURLY_MOVE = 0.30  # far above any real one-hour move on these markets
+
+
+def bars_problem(bars: pd.DataFrame) -> str:
+    """Why this day's hourly bars cannot be trusted ("" when they can). A day
+    is recorded once and never rewritten, so a bad price must not get in."""
+    cols = bars[["open", "high", "low", "close"]]
+    if cols.isna().any().any() or (cols <= 0).any().any():
+        return "missing or non-positive prices"
+    if (bars["high"] < bars["low"]).any():
+        return "a bar has high below low"
+    move = bars["close"].pct_change().abs().max()
+    if move > MAX_HOURLY_MOVE:
+        return f"{move:.0%} one-hour move, looks like a bad price"
+    return ""
+
+
 def closed_hourly(df: pd.DataFrame, now: pd.Timestamp) -> pd.DataFrame:
     return df[df.index + pd.Timedelta(hours=1) <= now]
 
@@ -125,6 +142,10 @@ def run_today() -> None:
             bars = df[df.index.normalize() == day]
             if len(bars) < 21:
                 print(f"{day.date()} {name}: only {len(bars)} hourly bars, skipped")
+                continue
+            problem = bars_problem(bars)
+            if problem:
+                print(f"{day.date()} {name}: {problem}, skipped")
                 continue
             res = day_result(bars)
             record(day.date(), name, res)

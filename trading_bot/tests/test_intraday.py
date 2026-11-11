@@ -90,3 +90,23 @@ def test_summary_keeps_a_market_missing_on_the_last_day(tmp_path, monkeypatch, c
     ip.record("2026-11-09", "BTC", {"trades": 1, "pnl_%": 0.0})
     ip.summary()
     assert "-20.00%" in capsys.readouterr().out  # (1.10 + 0.50) / 2 - 1
+
+
+def test_bad_hourly_bars_are_refused():
+    day = df[df.index.normalize() == df.index.normalize()[-30]]
+    assert ip.bars_problem(day) == ""
+    # every real day of the local history passes: the check never hides a real day
+    for _, g in df.groupby(df.index.normalize()):
+        assert ip.bars_problem(g) == ""
+    zero = day.copy()
+    zero.iloc[5, zero.columns.get_loc("close")] = 0.0
+    assert "non-positive" in ip.bars_problem(zero)
+    nan = day.copy()
+    nan.iloc[5, nan.columns.get_loc("low")] = np.nan
+    assert "missing" in ip.bars_problem(nan)
+    inverted = day.copy()
+    inverted.iloc[5, inverted.columns.get_loc("high")] = inverted["low"].iloc[5] / 2
+    assert "high below low" in ip.bars_problem(inverted)
+    spike = day.copy()
+    spike.iloc[5, spike.columns.get_loc("close")] *= 2
+    assert "one-hour move" in ip.bars_problem(spike)
