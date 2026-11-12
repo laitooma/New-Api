@@ -39,6 +39,7 @@ jobs:
         working-directory: trading_bot
         run: |
           mkdir -p "$BOT_STATE_DIR"
+          set -o pipefail # sans cela, un echec du script est masque par tee
           python bot.py | tee run.log
           echo '```' >> "$GITHUB_STEP_SUMMARY"
           cat run.log >> "$GITHUB_STEP_SUMMARY"

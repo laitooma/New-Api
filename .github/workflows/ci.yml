@@ -50,6 +50,7 @@ jobs:
           python bot.py --replay
           python crosscheck.py
           python intraday_paper.py --csv
+          python universe_paper.py --csv
 
   terraform:
     runs-on: ubuntu-latest

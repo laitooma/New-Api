@@ -34,6 +34,7 @@ jobs:
       - name: Journee de day trading simulee
         working-directory: trading_bot
         run: |
+          set -o pipefail # sans cela, un echec du script est masque par tee
           python intraday_paper.py | tee run.log
           echo '```' >> "$GITHUB_STEP_SUMMARY"
           cat run.log >> "$GITHUB_STEP_SUMMARY"
