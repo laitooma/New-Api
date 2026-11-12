@@ -57,6 +57,19 @@ or SMA50 : +31,6 % / +31,6 %...).
   il faut donc merger d'abord. Lancement manuel possible via l'onglet Actions →
   « Run workflow ».
 
+## Simulation séparée sur 7 autres marchés
+
+`universe_paper.py` applique le même filtre de tendance, sans rien changer, à
+7 marchés de plus : Nasdaq 100, S&P 500, DAX, pétrole, argent, EUR/USD et
+USD/JPY. Règles figées le 2026-11-12, seuls les jours à partir du 13 comptent.
+Un septième du capital par marché, frais de 0,2 % par ordre, prix journaliers
+Yahoo Finance. Résultats dans `paper_universe/days.csv`.
+
+C'est une mesure de la stratégie, pas quelque chose que le bot peut faire avec
+500 € : ces marchés ne s'achètent pas sur un exchange crypto. Elle est tenue à
+part pour ne pas perturber la simulation du bot (BTC, ETH, or). Sur l'historique,
+élargir à 10 marchés réduisait la pire baisse mais pas le gain.
+
 ## Changer la stratégie : la règle
 Toute variante doit passer `walkforward.py` : réglage choisi sur le passé seulement,
 jugé sur la période suivante jamais vue, fenêtre après fenêtre, frais compris. Elle

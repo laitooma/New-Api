@@ -1,0 +1,55 @@
+name: Bot trading - simulation 7 marches
+
+# Simulation uniquement : aucune cle API, aucun argent reel.
+# Regles figees le 2026-11-12 : meme filtre de tendance que le bot, sur
+# Nasdaq, S&P 500, DAX, petrole, argent, EUR/USD et USD/JPY.
+on:
+  schedule:
+    - cron: "17 1 * * *" # 01:17 UTC, toutes les bougies de la veille sont cloturees
+    # creneau de secours : GitHub saute parfois des passages planifies ;
+    # chaque passage rattrape les jours manquants, jamais deux fois le meme
+    - cron: "43 7 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: trading-bot-paper
+  cancel-in-progress: false
+
+jobs:
+  universe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Installer les dependances
+        run: pip install pandas numpy requests
+
+      - name: Jours simules sur les 7 marches
+        working-directory: trading_bot
+        run: |
+          set -o pipefail
+          python universe_paper.py | tee run.log
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          cat run.log >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Enregistrer le resultat
+        run: |
+          git config user.name "trading-bot"
+          git config user.email "trading-bot@users.noreply.github.com"
+          # le dossier n'existe pas tant qu'aucun jour n'a ete enregistre
+          if [ -d trading_bot/paper_universe ]; then git add trading_bot/paper_universe; fi
+          if git diff --cached --quiet; then
+            echo "Rien de nouveau"
+          else
+            git commit -m "Paper 7 marches $(date -u +%F)"
+            git pull --rebase
+            git push
+          fi
