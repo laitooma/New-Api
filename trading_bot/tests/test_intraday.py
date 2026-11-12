@@ -110,3 +110,50 @@ def test_bad_hourly_bars_are_refused():
     spike = day.copy()
     spike.iloc[5, spike.columns.get_loc("close")] *= 2
     assert "one-hour move" in ip.bars_problem(spike)
+
+
+def test_day_trade_matches_the_recorded_result():
+    """Entry/exit of the logged trade must explain the day's result: price
+    move in the trade's direction minus 0.10% per side."""
+    seen = 0
+    for _, bars in df.groupby(df.index.normalize()):
+        if len(bars) < 21:
+            continue
+        res = ip.day_result(bars)
+        trade = ip.day_trade(bars, res["pnl_%"])
+        assert (trade is None) == (res["trades"] == 0)
+        if trade is None:
+            continue
+        seen += 1
+        sign = 1 if trade["side"] == "achat" else -1
+        move = sign * (trade["exit_price"] / trade["entry_price"] - 1) * 100
+        # the engine compounds hour by hour, so on a large move the result is
+        # a few hundredths of a point away from the plain entry/exit figure
+        gap = abs(move - 2 * ip.COST * 100 - res["pnl_%"])
+        assert gap < 0.03 + 0.03 * abs(move)
+        assert trade["exit_time"].endswith("20:00")
+        assert "08:00" <= trade["entry_time"][-5:] <= "19:00"
+    assert seen > 10
+
+
+def test_trades_are_logged_and_backfilled_once(tmp_path, monkeypatch):
+    import pandas as pd
+
+    monkeypatch.setattr(ip, "OUT_DIR", str(tmp_path))
+    monkeypatch.setattr(ip, "MARKETS", {"BTC": "BTC/USD"})
+    monkeypatch.setattr(ip, "fetch_kraken", lambda sym: df)
+    days = [d for d, g in df.groupby(df.index.normalize()) if len(g) >= 21][-6:]
+    traded = [d for d in days if ip.day_result(df[df.index.normalize() == d])["trades"]]
+    monkeypatch.setattr(ip, "finished_days", lambda now: days)
+    # the oldest traded day was recorded before trades.csv existed
+    old = traded[0]
+    ip.record(old.date(), "BTC", {"trades": 1, "pnl_%": 9.99})
+    for _ in range(2):  # the second run must add nothing
+        ip.run_today()
+    rows = pd.read_csv(tmp_path / "trades.csv")
+    assert len(rows) == len(traded) and not rows.duplicated(["date", "market"]).any()
+    # the backfilled trade keeps the result already on record
+    assert rows.loc[rows["date"] == str(old.date()), "pnl_%"].iloc[0] == 9.99
+    recorded = pd.read_csv(tmp_path / "days.csv")
+    assert len(recorded) == len(days) and not recorded.duplicated(["date"]).any()
+    assert recorded.loc[recorded["date"] == str(old.date()), "pnl_%"].iloc[0] == 9.99
