@@ -125,7 +125,9 @@ class FakeCcxtExchange:
         return self.markets
 
     def fetch_ohlcv(self, symbol, tf, limit):
-        d = df.iloc[-limit:]
+        # re-dated so the last candle is yesterday: with the file's own dates
+        # this test started failing once the file was more than 4 days old
+        d = _recent().iloc[-limit:]
         return [
             [int(t.timestamp() * 1000), r.open, r.high, r.low, r.close, 0]
             for t, r in d.iterrows()
