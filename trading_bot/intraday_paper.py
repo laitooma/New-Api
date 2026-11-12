@@ -39,6 +39,74 @@ def day_result(bars: pd.DataFrame) -> dict:
     return {"pnl_%": r["total_%"], "trades": r["trades"]}
 
 
+TRADE_FIELDS = [
+    "date",
+    "market",
+    "side",
+    "entry_time",
+    "entry_price",
+    "exit_time",
+    "exit_price",
+    "pnl_%",
+]
+
+
+def day_trade(bars: pd.DataFrame, pnl: float) -> dict | None:
+    """The day's single trade, as the engine ran it: decided at the close of an
+    hourly bar, so entry and exit are the close time and close price of the
+    bar where the position was opened and closed. None when nothing traded.
+    `pnl` is the day's net result (fees included), which is that trade's."""
+    pos = it._flat_at_day_end(it.asia_breakout(bars), bars.index)
+    held = [i for i, p in enumerate(pos) if p != 0]
+    if not held:
+        return None
+    first, last = held[0], held[-1] + 1  # pos is back to 0 at bar `last`
+    hour = pd.Timedelta(hours=1)
+    return {
+        "side": "achat" if pos[first] > 0 else "vente",
+        "entry_time": (bars.index[first] + hour).strftime("%Y-%m-%d %H:%M"),
+        "entry_price": float(bars["close"].iloc[first]),
+        "exit_time": (bars.index[last] + hour).strftime("%Y-%m-%d %H:%M"),
+        "exit_price": float(bars["close"].iloc[last]),
+        "pnl_%": pnl,
+    }
+
+
+def _keys(name: str) -> set:
+    path = os.path.join(OUT_DIR, name)
+    if not os.path.exists(path):
+        return set()
+    with open(path) as f:
+        return {(r["date"], r["market"]) for r in csv.DictReader(f)}
+
+
+def record_trade(day, market: str, trade: dict) -> None:
+    """Append the trade to trades.csv (times in UTC). Never twice."""
+    if (str(day), market) in _keys("trades.csv"):
+        return
+    os.makedirs(OUT_DIR, exist_ok=True)
+    path = os.path.join(OUT_DIR, "trades.csv")
+    new = not os.path.exists(path)
+    with open(path, "a", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=TRADE_FIELDS, lineterminator="\n")
+        if new:
+            w.writeheader()
+        w.writerow({"date": day, "market": market, **trade})
+
+
+def traded_days() -> dict:
+    """{(date, market): recorded pnl} for the recorded days that had a trade."""
+    path = os.path.join(OUT_DIR, "days.csv")
+    if not os.path.exists(path):
+        return {}
+    with open(path) as f:
+        return {
+            (r["date"], r["market"]): float(r["pnl_%"])
+            for r in csv.DictReader(f)
+            if int(r["trades"]) > 0
+        }
+
+
 MAX_HOURLY_MOVE = 0.30  # far above any real one-hour move on these markets
 
 
@@ -133,8 +201,18 @@ def run_today() -> None:
         print(f"nothing to record before {FIRST_DAY.date()} (earlier days were seen)")
         return
     done = recorded()
+    # days recorded before trades.csv existed: their trade is written now,
+    # with the result already on record (a recorded day is never rewritten)
+    known, detailed = traded_days(), _keys("trades.csv")
     for name, sym in MARKETS.items():
-        todo = [d for d in days if (str(d.date()), name) not in done]
+        todo = [
+            d
+            for d in days
+            if (str(d.date()), name) not in done
+            or (
+                (str(d.date()), name) in known and (str(d.date()), name) not in detailed
+            )
+        ]
         if not todo:
             continue
         df = closed_hourly(fetch_kraken(sym), now)
@@ -148,6 +226,17 @@ def run_today() -> None:
                 print(f"{day.date()} {name}: {problem}, skipped")
                 continue
             res = day_result(bars)
+            key = (str(day.date()), name)
+            trade = day_trade(bars, known.get(key, res["pnl_%"]))
+            if trade:
+                record_trade(day.date(), name, trade)
+            if key in done:
+                if abs(known[key] - res["pnl_%"]) > 0.01:
+                    print(
+                        f"{day.date()} {name}: prices changed since recording "
+                        f"({known[key]:+.2f}% recorded, {res['pnl_%']:+.2f}% now)"
+                    )
+                continue
             record(day.date(), name, res)
             print(
                 f"{day.date()} {name}: {res['trades']} trade(s), {res['pnl_%']:+.2f}%"
@@ -158,13 +247,18 @@ def run_today() -> None:
 def replay_csv() -> None:
     global OUT_DIR
     OUT_DIR = os.path.join(HERE, "replay_intraday")
-    if os.path.exists(os.path.join(OUT_DIR, "days.csv")):
-        os.remove(os.path.join(OUT_DIR, "days.csv"))
+    for old in ("days.csv", "trades.csv"):
+        if os.path.exists(os.path.join(OUT_DIR, old)):
+            os.remove(os.path.join(OUT_DIR, old))
     for name, f in CSV_FILES.items():
         df = it.load_h1(os.path.join(HERE, "data", f))
         for day, bars in df.groupby(df.index.normalize()):
             if len(bars) >= 21:
-                record(day.date(), name, day_result(bars))
+                res = day_result(bars)
+                record(day.date(), name, res)
+                trade = day_trade(bars, res["pnl_%"])
+                if trade:
+                    record_trade(day.date(), name, trade)
     summary()
 
 
