@@ -52,10 +52,15 @@ def day_rows(df: pd.DataFrame, first_day: pd.Timestamp) -> list:
     the first recorded open and pays its cost, like any other entry."""
     days = df.index.normalize()
     start = int((days < first_day).sum())  # first candle of the test
-    if start == 0 or start >= len(df):
+    if start >= len(df):
         return []
     target = st.sma_ensemble(df)
-    target.iloc[: start - 1] = 0.0  # flat before the test starts
+    if start:
+        target.iloc[: start - 1] = 0.0  # flat before the test starts
+    else:
+        # a year on, Yahoo's one-year window no longer reaches first_day: the
+        # older days are already recorded, keep recording the new ones
+        start = 1
     eq = bt.run(df, target, COST)
     return [
         {

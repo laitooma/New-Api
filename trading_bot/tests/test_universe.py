@@ -84,3 +84,17 @@ def test_summary_is_the_mean_of_seven_equal_sleeves(tmp_path, monkeypatch, capsy
     up.record("SP500", {"date": "2026-11-13", "position_%": 100.0, "pnl_%": 7.0})
     up.summary()
     assert "+1.00%" in capsys.readouterr().out  # 7% on one seventh of the capital
+
+
+def test_still_records_once_first_day_is_older_than_the_price_window():
+    """Yahoo returns one year of candles: a year after FIRST_DAY it is no
+    longer in the window, and new days must still be recorded, with the
+    same result as the backtest engine."""
+    window = df.iloc[-260:]
+    first = window.index.normalize()[0] - pd.Timedelta(days=30)
+    rows = up.day_rows(window, first)
+    eq = bt.run(window, st.sma_ensemble(window), up.COST)
+    assert rows and rows[-1]["date"] == str(window.index[-1].date())
+    for k in (1, 2, 3):
+        expected = (eq.iloc[-k] / eq.iloc[-k - 1] - 1) * 100
+        assert abs(rows[-k]["pnl_%"] - expected) < 1e-3
