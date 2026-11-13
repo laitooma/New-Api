@@ -258,3 +258,42 @@ def test_paper_fills_at_todays_open_not_at_run_time(tmp_path, monkeypatch):
     )
     bot.run_today(live=False)
     assert set(seen.values()) == {111.0}
+
+
+def test_yahoo_candles_are_dated_by_the_exchange_day():
+    """EUR/USD candles start at 00:00 London: 23:00 UTC the day before in
+    summer. Each must keep its own trading day, in summer and in winter."""
+
+    def reply(stamps, tz):
+        n = len(stamps)
+        q = {
+            k: [1.1 + i / 100 for i in range(n)]
+            for k in ["open", "high", "low", "close"]
+        }
+        return {
+            "chart": {
+                "result": [
+                    {
+                        "meta": {"exchangeTimezoneName": tz},
+                        "timestamp": [int(pd.Timestamp(t).timestamp()) for t in stamps],
+                        "indicators": {"quote": [q]},
+                    }
+                ]
+            }
+        }
+
+    summer = bot.yahoo_frame(
+        reply(["2026-07-06 23:00Z", "2026-07-07 23:00Z"], "Europe/London")
+    )
+    assert [d.date().isoformat() for d in summer.index] == ["2026-07-07", "2026-07-08"]
+    winter = bot.yahoo_frame(
+        reply(["2026-11-09 00:00Z", "2026-11-10 00:00Z"], "Europe/London")
+    )
+    assert [d.date().isoformat() for d in winter.index] == ["2026-11-09", "2026-11-10"]
+    us = bot.yahoo_frame(reply(["2026-07-07 13:30Z"], "America/New_York"))
+    assert us.index[0].date().isoformat() == "2026-07-07"
+    # a duplicated live row keeps the latest values
+    dup = bot.yahoo_frame(
+        reply(["2026-11-10 00:00Z", "2026-11-10 09:00Z"], "Europe/London")
+    )
+    assert len(dup) == 1 and dup["close"].iloc[0] == 1.11

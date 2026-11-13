@@ -115,13 +115,24 @@ def fetch_yahoo(ticker: str) -> pd.DataFrame:
 
     url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}?range=1y&interval=1d"
     j = requests.get(url, timeout=20, headers={"User-Agent": "trend-bot"}).json()
-    res = j["chart"]["result"][0]
+    return closed_daily(yahoo_frame(j))
+
+
+def yahoo_frame(reply: dict) -> pd.DataFrame:
+    """Daily candles from a Yahoo chart reply, each dated by its trading day.
+
+    Yahoo stamps a daily candle with the session start in the exchange's own
+    time zone: EUR/USD at 00:00 London, so 23:00 UTC the day before in summer.
+    Taking the UTC date would shift every candle back a day and let the live
+    one pass as yesterday's closed candle; the exchange's local date does not."""
+    res = reply["chart"]["result"][0]
     q = res["indicators"]["quote"][0]
-    df = pd.DataFrame(
-        {k: q[k] for k in ["open", "high", "low", "close"]},
-        index=pd.to_datetime(res["timestamp"], unit="s", utc=True).normalize(),
-    )
-    return closed_daily(df.dropna())
+    tz = res.get("meta", {}).get("exchangeTimezoneName") or "UTC"
+    stamps = pd.to_datetime(res["timestamp"], unit="s", utc=True).tz_convert(tz)
+    days = stamps.tz_localize(None).normalize().tz_localize("UTC")
+    df = pd.DataFrame({k: q[k] for k in ["open", "high", "low", "close"]}, index=days)
+    # the live candle can come twice with the same date: keep the latest
+    return df.dropna()[lambda d: ~d.index.duplicated(keep="last")]
 
 
 def load_csv(name: str) -> pd.DataFrame:
