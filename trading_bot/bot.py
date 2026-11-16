@@ -115,7 +115,24 @@ def fetch_yahoo(ticker: str) -> pd.DataFrame:
 
     url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}?range=1y&interval=1d"
     j = requests.get(url, timeout=20, headers={"User-Agent": "trend-bot"}).json()
-    return closed_daily(yahoo_frame(j))
+    df = closed_daily(yahoo_frame(j))
+    df.attrs["yahoo_tail"] = yahoo_tail(j)
+    return df
+
+
+def yahoo_tail(reply: dict, n: int = 3) -> str:
+    """The last candles of a Yahoo reply as received (UTC time, the trading
+    day it is filed under, close or 'vide'), to see in the run log why a day
+    is missing."""
+    res = reply["chart"]["result"][0]
+    tz = res.get("meta", {}).get("exchangeTimezoneName") or "UTC"
+    closes = res["indicators"]["quote"][0]["close"]
+    out = []
+    for t, c in list(zip(res["timestamp"], closes))[-n:]:
+        utc = pd.Timestamp(t, unit="s", tz="UTC")
+        day = utc.tz_convert(tz).date()
+        out.append(f"{utc:%Y-%m-%d %H:%M}Z->{day} {'vide' if c is None else c}")
+    return f"{tz}: " + " | ".join(out)
 
 
 def yahoo_frame(reply: dict) -> pd.DataFrame:

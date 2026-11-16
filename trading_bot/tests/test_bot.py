@@ -297,3 +297,23 @@ def test_yahoo_candles_are_dated_by_the_exchange_day():
         reply(["2026-11-10 00:00Z", "2026-11-10 09:00Z"], "Europe/London")
     )
     assert len(dup) == 1 and dup["close"].iloc[0] == 1.11
+
+
+def test_yahoo_tail_shows_the_last_candles_as_received():
+    reply = {
+        "chart": {
+            "result": [
+                {
+                    "meta": {"exchangeTimezoneName": "America/New_York"},
+                    "timestamp": [
+                        int(pd.Timestamp("2026-11-13 14:30Z").timestamp()),
+                        int(pd.Timestamp("2026-11-14 21:00Z").timestamp()),
+                    ],
+                    "indicators": {"quote": [{"close": [6800.5, None]}]},
+                }
+            ]
+        }
+    }
+    tail = bot.yahoo_tail(reply)
+    assert "2026-11-13 14:30Z->2026-11-13 6800.5" in tail
+    assert "2026-11-14 21:00Z->2026-11-14 vide" in tail

@@ -132,6 +132,11 @@ def run_today() -> None:
             print(f"{name}: skipped ({type(e).__name__}: {e})")
             continue
         read += 1
+        # what Yahoo sent and the last closed day kept, to explain a missing day
+        last = df.index[-1].date() if len(df) else "aucune"
+        print(
+            f"{name}: derniere bougie close {last} ; recu {df.attrs.get('yahoo_tail', '?')}"
+        )
         for row in day_rows(df, FIRST_DAY):
             if record(name, row):
                 print(
