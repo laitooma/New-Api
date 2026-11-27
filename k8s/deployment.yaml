@@ -1,0 +1,51 @@
+# Deploiement de l'API dans Kubernetes (cluster kind ephemere en CI, gratuit).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: devops-pipeline
+  labels:
+    app: devops-pipeline
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: devops-pipeline
+  template:
+    metadata:
+      labels:
+        app: devops-pipeline
+    spec:
+      # USER appuser est un nom : Kubernetes exige l'UID numerique pour verifier "non-root".
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+      containers:
+        - name: api
+          image: devops-pipeline:ci
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8000
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 128Mi
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10

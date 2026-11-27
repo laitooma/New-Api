@@ -97,3 +97,54 @@ jobs:
           docker tag devops-pipeline:ci "$IMAGE:sha-${GITHUB_SHA::7}"
           docker push --all-tags "$IMAGE"
           echo "Image publiee : $IMAGE"
+
+
+  # Deploiement Kubernetes gratuit : un cluster "kind" jetable dans la CI
+  kubernetes:
+    needs: lint-and-test
+    runs-on: ubuntu-latest
+    env:
+      KIND_VERSION: v0.31.0
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Installer kind
+        run: |
+          curl -fsSLo kind "https://kind.sigs.k8s.io/dl/${KIND_VERSION}/kind-linux-amd64"
+          chmod +x kind && sudo mv kind /usr/local/bin/kind
+          kind version
+          kubectl version --client
+
+      - name: Construire l'image
+        run: docker build --build-arg APP_VERSION="sha-${GITHUB_SHA::7}" -t devops-pipeline:ci .
+
+      - name: Creer le cluster et charger l'image
+        run: |
+          kind create cluster --name ci --wait 120s
+          kind load docker-image devops-pipeline:ci --name ci
+
+      - name: Deployer
+        run: |
+          kubectl apply -f k8s/
+          kubectl rollout status deployment/devops-pipeline --timeout=120s
+          kubectl get pods -o wide
+
+      - name: Tester via le Service
+        run: |
+          kubectl port-forward service/devops-pipeline 8080:80 &
+          for i in $(seq 1 15); do
+            if curl -fsS http://localhost:8080/health; then
+              echo " -> API OK dans Kubernetes"
+              curl -fsS http://localhost:8080/version | grep "sha-${GITHUB_SHA::7}"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Le Service n'a pas repondu" >&2
+          exit 1
+
+      - name: Diagnostic en cas d'echec
+        if: failure()
+        run: |
+          kubectl describe pods -l app=devops-pipeline
+          kubectl logs -l app=devops-pipeline --tail=50
