@@ -3,7 +3,7 @@
 Projet DevOps débutant : une petite API Python qu'on fait passer, étape par étape,
 du code jusqu'au cloud.
 
-[![CI](https://github.com/laitooma/devops-pipeline/actions/workflows/ci.yml/badge.svg)](https://github.com/laitooma/devops-pipeline/actions/workflows/ci.yml)
+[![CI](https://github.com/slim-kchir/devops-pipeline/actions/workflows/ci.yml/badge.svg)](https://github.com/slim-kchir/devops-pipeline/actions/workflows/ci.yml)
 
 ## Feuille de route
 
@@ -56,7 +56,7 @@ pull request :
 3. **terraform** (en parallèle) : `terraform fmt -check` puis `terraform validate`
    sur `infra/`, sans compte AWS.
 4. **Publication** (seulement après un push sur `main`, jamais depuis une PR) :
-   pousse l'image sur `ghcr.io/laitooma/devops-pipeline` avec deux tags,
+   pousse l'image sur `ghcr.io/slim-kchir/devops-pipeline` avec deux tags,
    `latest` et `sha-<commit>` (pour savoir exactement quel code tourne).
 
 ## Kubernetes (dans la CI, 0 €)
@@ -88,8 +88,8 @@ kind delete cluster --name dev
 ## Récupérer l'image publiée
 
 ```bash
-docker pull ghcr.io/laitooma/devops-pipeline:latest
-docker run -d -p 8000:8000 ghcr.io/laitooma/devops-pipeline:latest
+docker pull ghcr.io/slim-kchir/devops-pipeline:latest
+docker run -d -p 8000:8000 ghcr.io/slim-kchir/devops-pipeline:latest
 ```
 
 Le package est **public** : pas besoin de `docker login` pour le récupérer.
@@ -128,7 +128,7 @@ curl "$(terraform output -raw health_url)"   # {"status":"ok"}
 Déployer une version précise (recommandé, plutôt que `latest`) :
 
 ```bash
-terraform apply -var image=ghcr.io/laitooma/devops-pipeline:sha-<commit>
+terraform apply -var image=ghcr.io/slim-kchir/devops-pipeline:sha-<commit>
 ```
 
 Tout supprimer et arrêter de payer :
