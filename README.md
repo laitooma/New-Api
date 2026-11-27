@@ -12,8 +12,9 @@ du code jusqu'au cloud.
 - [x] **3. CI GitHub Actions** : lint (ruff) → tests (pytest) → build Docker → smoke test
 - [x] **3b. Registre** : publication de l'image sur GitHub Container Registry (`ghcr.io`)
 - [x] **4. Terraform** : l'infrastructure AWS décrite en code (`infra/`), vérifiée par la CI
-- [ ] **5. AWS** : `terraform apply` depuis ton poste (voir [Déployer sur AWS](#déployer-sur-aws))
 
+- [x] **5. Kubernetes** : déploiement sur un cluster `kind` éphémère dans la CI (2 replicas, probes, gratuit)
+- [ ] **6. AWS (optionnel, payant)** : `terraform apply` depuis ton poste (voir [Déployer sur AWS](#déployer-sur-aws))
 ## Lancer en local (sans Docker)
 
 ```bash
@@ -57,6 +58,32 @@ pull request :
 4. **Publication** (seulement après un push sur `main`, jamais depuis une PR) :
    pousse l'image sur `ghcr.io/laitooma/devops-pipeline` avec deux tags,
    `latest` et `sha-<commit>` (pour savoir exactement quel code tourne).
+
+## Kubernetes (dans la CI, 0 €)
+
+Le job `kubernetes` crée un cluster [kind](https://kind.sigs.k8s.io/) jetable, y
+charge l'image et applique `k8s/` :
+
+- `k8s/deployment.yaml` : 2 replicas, `readinessProbe` (le pod reçoit du trafic
+  seulement quand `/health` répond) et `livenessProbe` (Kubernetes redémarre le
+  conteneur s'il ne répond plus), limites CPU/mémoire, non-root, système de
+  fichiers en lecture seule.
+- `k8s/service.yaml` : adresse stable qui répartit le trafic entre les pods.
+
+La CI attend que le déploiement soit prêt (`kubectl rollout status`) puis appelle
+`/health` et `/version` à travers le Service.
+
+En local (avec Docker et kind installés) :
+
+```bash
+docker build -t devops-pipeline:ci .
+kind create cluster --name dev
+kind load docker-image devops-pipeline:ci --name dev
+kubectl apply -f k8s/
+kubectl rollout status deployment/devops-pipeline
+kubectl port-forward service/devops-pipeline 8080:80   # http://localhost:8080/health
+kind delete cluster --name dev
+```
 
 ## Récupérer l'image publiée
 
