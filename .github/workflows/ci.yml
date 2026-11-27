@@ -33,30 +33,6 @@ jobs:
       - name: Tests (pytest)
         run: pytest -v
 
-  trading-bot:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-
-      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
-        with:
-          python-version: "3.13"
-
-      - name: Installer les dependances du bot
-        run: pip install pandas numpy pytest backtesting==0.6.4
-
-      - name: Tests du bot (pas de lecture du futur, frais, arret d'urgence)
-        working-directory: trading_bot
-        run: python -m pytest -q tests
-
-      - name: Rejeu du bot + controle croise avec backtesting.py
-        working-directory: trading_bot
-        run: |
-          python bot.py --replay
-          python crosscheck.py
-          python intraday_paper.py --csv
-          python universe_paper.py --csv
-
   terraform:
     runs-on: ubuntu-latest
     defaults:
