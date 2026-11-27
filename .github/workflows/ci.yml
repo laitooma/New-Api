@@ -148,3 +148,25 @@ jobs:
         run: |
           kubectl describe pods -l app=devops-pipeline
           kubectl logs -l app=devops-pipeline --tail=50
+
+  # Scan de securite de l'image : echoue si une faille CRITIQUE corrigeable existe
+  securite:
+    needs: lint-and-test
+    runs-on: ubuntu-latest
+    env:
+      TRIVY_IMAGE: aquasec/trivy:0.72.0
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Construire l'image
+        run: docker build -t devops-pipeline:ci .
+
+      - name: Rapport complet (HIGH et CRITICAL, informatif)
+        run: |
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+            "$TRIVY_IMAGE" image --severity HIGH,CRITICAL --exit-code 0 devops-pipeline:ci
+
+      - name: Bloquer si faille CRITICAL corrigeable
+        run: |
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+            "$TRIVY_IMAGE" image --severity CRITICAL --ignore-unfixed --exit-code 1 devops-pipeline:ci
