@@ -33,7 +33,15 @@ docker build -t devops-pipeline .
 docker run -d --name api -p 8000:8000 devops-pipeline
 curl http://localhost:8000/health        # {"status":"ok"}
 docker ps                                # colonne STATUS : (healthy) après ~30 s
+curl http://localhost:8000/version   # {"version":"dev"}
 docker rm -f api
+```
+
+Ou en une seule commande avec Docker Compose :
+
+```bash
+docker compose up --build -d   # http://localhost:8000/version -> {"version":"local"}
+docker compose down
 ```
 
 ## CI

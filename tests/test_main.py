@@ -14,3 +14,9 @@ def test_health_returns_ok():
 def test_unknown_route_returns_404():
     response = client.get("/bonjour")
     assert response.status_code == 404
+
+
+def test_version_returns_dev_by_default():
+    response = client.get("/version")
+    assert response.status_code == 200
+    assert response.json() == {"version": "dev"}

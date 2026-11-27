@@ -1,0 +1,10 @@
+# Lance l'API avec une seule commande : docker compose up --build
+services:
+  api:
+    build:
+      context: .
+      args:
+        APP_VERSION: local
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
