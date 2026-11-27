@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 
-app = FastAPI(title="New-Api")
+app = FastAPI(title="devops-pipeline")
 
 
 @app.get("/health")

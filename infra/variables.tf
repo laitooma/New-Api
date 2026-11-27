@@ -7,13 +7,13 @@ variable "region" {
 variable "service_name" {
   description = "Nom du service Lightsail (minuscules, chiffres et tirets)"
   type        = string
-  default     = "new-api"
+  default     = "devops-pipeline"
 }
 
 variable "image" {
   description = "Image a deployer. Mettre un tag sha-xxxxxxx pour savoir exactement quel code tourne."
   type        = string
-  default     = "ghcr.io/laitooma/new-api:latest"
+  default     = "ghcr.io/laitooma/devops-pipeline:latest"
 }
 
 variable "power" {

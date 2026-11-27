@@ -1,9 +1,9 @@
-# devops-portfolio-api
+# devops-pipeline
 
 Projet DevOps débutant : une petite API Python qu'on fait passer, étape par étape,
 du code jusqu'au cloud.
 
-[![CI](https://github.com/laitooma/New-Api/actions/workflows/ci.yml/badge.svg)](https://github.com/laitooma/New-Api/actions/workflows/ci.yml)
+[![CI](https://github.com/laitooma/devops-pipeline/actions/workflows/ci.yml/badge.svg)](https://github.com/laitooma/devops-pipeline/actions/workflows/ci.yml)
 
 ## Feuille de route
 
@@ -29,8 +29,8 @@ uvicorn app.main:app --reload           # http://localhost:8000/health
 ## Lancer avec Docker
 
 ```bash
-docker build -t new-api .
-docker run -d --name api -p 8000:8000 new-api
+docker build -t devops-pipeline .
+docker run -d --name api -p 8000:8000 devops-pipeline
 curl http://localhost:8000/health        # {"status":"ok"}
 docker ps                                # colonne STATUS : (healthy) après ~30 s
 docker rm -f api
@@ -47,14 +47,14 @@ pull request :
 3. **terraform** (en parallèle) : `terraform fmt -check` puis `terraform validate`
    sur `infra/`, sans compte AWS.
 4. **Publication** (seulement après un push sur `main`, jamais depuis une PR) :
-   pousse l'image sur `ghcr.io/laitooma/new-api` avec deux tags,
+   pousse l'image sur `ghcr.io/laitooma/devops-pipeline` avec deux tags,
    `latest` et `sha-<commit>` (pour savoir exactement quel code tourne).
 
 ## Récupérer l'image publiée
 
 ```bash
-docker pull ghcr.io/laitooma/new-api:latest
-docker run -d -p 8000:8000 ghcr.io/laitooma/new-api:latest
+docker pull ghcr.io/laitooma/devops-pipeline:latest
+docker run -d -p 8000:8000 ghcr.io/laitooma/devops-pipeline:latest
 ```
 
 Le package est **public** : pas besoin de `docker login` pour le récupérer.
@@ -93,7 +93,7 @@ curl "$(terraform output -raw health_url)"   # {"status":"ok"}
 Déployer une version précise (recommandé, plutôt que `latest`) :
 
 ```bash
-terraform apply -var image=ghcr.io/laitooma/new-api:sha-<commit>
+terraform apply -var image=ghcr.io/laitooma/devops-pipeline:sha-<commit>
 ```
 
 Tout supprimer et arrêter de payer :

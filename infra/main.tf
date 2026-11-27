@@ -6,7 +6,7 @@ resource "aws_lightsail_container_service" "api" {
   scale = var.scale
 
   tags = {
-    project = "new-api"
+    project = "devops-pipeline"
   }
 }
 

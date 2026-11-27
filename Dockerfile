@@ -2,7 +2,7 @@
 FROM python:3.13-slim
 
 # Relie le package ghcr.io a ce depot GitHub
-LABEL org.opencontainers.image.source="https://github.com/laitooma/New-Api"
+LABEL org.opencontainers.image.source="https://github.com/laitooma/devops-pipeline"
 
 # Pas de fichiers .pyc, logs affiches immediatement
 ENV PYTHONDONTWRITEBYTECODE=1 \
