@@ -2,7 +2,7 @@
 FROM python:3.13-slim
 
 # Relie le package ghcr.io a ce depot GitHub
-LABEL org.opencontainers.image.source="https://github.com/laitooma/devops-pipeline"
+LABEL org.opencontainers.image.source="https://github.com/slim-kchir/devops-pipeline"
 
 # Version de l'app (la CI passe le sha du commit : --build-arg APP_VERSION=...)
 ARG APP_VERSION=dev

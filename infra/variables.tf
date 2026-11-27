@@ -13,7 +13,7 @@ variable "service_name" {
 variable "image" {
   description = "Image a deployer. Mettre un tag sha-xxxxxxx pour savoir exactement quel code tourne."
   type        = string
-  default     = "ghcr.io/laitooma/devops-pipeline:latest"
+  default     = "ghcr.io/slim-kchir/devops-pipeline:latest"
 }
 
 variable "power" {
