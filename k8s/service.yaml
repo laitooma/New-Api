@@ -1,0 +1,11 @@
+# Adresse stable devant les pods (repartit la charge entre les 2 replicas)
+apiVersion: v1
+kind: Service
+metadata:
+  name: devops-pipeline
+spec:
+  selector:
+    app: devops-pipeline
+  ports:
+    - port: 80
+      targetPort: 8000
