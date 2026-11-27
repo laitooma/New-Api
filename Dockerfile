@@ -17,7 +17,9 @@ WORKDIR /app
 # Dependances d'abord : Docker garde cette couche en cache
 # tant que requirements.txt ne change pas.
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# pip sert seulement a installer : on le retire ensuite, dans la meme couche
+RUN pip install --no-cache-dir -r requirements.txt \
+    && pip uninstall -y pip
 
 # Code de l'application
 COPY app/ ./app/
